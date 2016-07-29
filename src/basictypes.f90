@@ -70,12 +70,12 @@ MODULE basictypes
     INTEGER(C_INT)                              :: num_cells        ! number of cells for quick reference
     INTEGER(C_INT)                              :: periodicity      ! 0 =: aperiodic, 1 =: periodic in y, 2 =: periodic in x, 3 =: periodic everywhere
     INTEGER(C_INT)                              :: num_states       ! number of possible discrete states
-    INTEGER(C_INT)                              :: mc_states        ! number of Monte-Carlo "sweeps" to perform during generation
+    INTEGER(C_INT)                              :: mc_sweeps        ! number of Monte-Carlo "sweeps" to perform during generation
     REAL(C_REAL)                                :: temperature      ! temperature of crystal during evolution (useful during Potts generation)
     REAL(C_REAL)                                :: en_per_length    ! constant used in grain boundary energy calculations (electronVolts per ?m)
     REAL(C_REAL),DIMENSION(1:2)                 :: grid_spacing     ! x and y spacing used in rectangular grid in Potts generator
-    REAL(C_REAL),DIMENSION(1:2)                 :: x_bounds         ! max and min x coordinate
-    REAL(C_REAL),DIMENSION(1:2)                 :: y_bounds         ! max and min y coordinate
+    REAL(C_REAL),DIMENSION(1:2)                 :: x_bounds         ! min and max x coordinate
+    REAL(C_REAL),DIMENSION(1:2)                 :: y_bounds         ! min and max y coordinate
     INTEGER(C_INT),DIMENSION(:),ALLOCATABLE     :: grain_size_array ! histogram of number of nodes in each grain, numbered the same as enumer
     INTEGER(C_INT)                              :: max_grain_index  ! Highest integer in enumer. Put here to avoid recalculation.
     INTEGER(C_INT)                              :: num_grains       ! Number of grains in crystal
@@ -109,7 +109,7 @@ CONTAINS
         WRITE(stderr,'(A,I8)') "WARNING: During node deallocation, lattice reported ", which_lattice%num_nodes, " nodes"
         WRITE(stderr,'(A,I8,A)') "   but there were ",SIZE(which_lattice%nodes)," nodes to deallocate."
       END IF
-      DO i=LBOUND(which_lattice%nodes),UBOUND(which_lattice%nodes)
+      DO i=LBOUND(which_lattice%nodes,1),UBOUND(which_lattice%nodes,1)
         CALL deallocate_lattice_node(which_lattice%nodes(i))
       END DO
       DEALLOCATE(which_lattice%nodes)
