@@ -6,6 +6,7 @@
 !   delivered 06 Feb 2016
 
 ! Subroutines
+!   init_lattic(which_lattice)
 !   deallocate_lattice_node(which_node)
 !   deallocate_lattice(which_lattice)
 
@@ -18,15 +19,15 @@ MODULE basictypes
   ! lattice node - measured and quantified points from the input plus some derived info
   TYPE lattice_node
     INTEGER(C_INT)                              :: n_index          ! self-referential index for convenience
-    !INTEGER(C_INT),DIMENSION(:),ALLOCATABLE     :: neigh_edges      ! array of indices to connected edges(Not useful, may not be allocated and populalated to save time)
-    !INTEGER(C_INT),DIMENSION(:),ALLOCATABLE     :: neigh_cells      ! array of indices to connected cells(Not useful, may not be allocated and populalated to save time)
+    !INTEGER(C_INT),DIMENSION(:),ALLOCATABLE     :: neigh_edges      ! array of indices to connected edges(Not useful, may not be allocated and populated to save time)
+    !INTEGER(C_INT),DIMENSION(:),ALLOCATABLE     :: neigh_cells      ! array of indices to connected cells(Not useful, may not be allocated and populated to save time)
     LOGICAL(C_BOOL)                             :: is_universe      ! flag for special universal nodes
     LOGICAL(C_BOOL)                             :: is_boundary      ! boundary marker flag
     REAL(C_REAL),DIMENSION(1:2)                 :: location         ! x-y coordinates of node
     INTEGER(C_INT)                              :: q_state          ! discretized state (spin state, orthogonal orientation state)
     REAL(C_REAL)                                :: major_axis       ! non-discretized state (orientation)
     INTEGER(C_INT)                              :: enumer           ! node membership in an enumerated grain
-    REAL(C_REAL)                                :: enrg_node        ! partial energy of node
+    REAL(C_REAL)                                :: enrg_node        ! partial energy of node (Half the sum of partial energies of connected edges)
   END TYPE lattice_node
 
   ! Lattice edge - line segments connecting  the nodes and bounding the cells
@@ -57,6 +58,7 @@ MODULE basictypes
     REAL(C_REAL)                                :: major_axis       ! non-discretized state (orientation)
     REAL(C_REAL),DIMENSION(1:2)                 :: center           ! Fermat point of triangular cell
     INTEGER(C_INT)                              :: enumer           ! cell membership in an enumerated grain
+    REAL(C_REAL)                                :: enrg_cell        ! partial energy for cell (Half the sum of partial energies of connected edges)
     LOGICAL(C_BOOL)                             :: is_universe      ! flag for special universal cells
   END TYPE lattice_cell
 
@@ -77,6 +79,7 @@ MODULE basictypes
     REAL(C_REAL),DIMENSION(1:2)                 :: x_bounds         ! min and max x coordinate
     REAL(C_REAL),DIMENSION(1:2)                 :: y_bounds         ! min and max y coordinate
     INTEGER(C_INT),DIMENSION(:),ALLOCATABLE     :: grain_size_array ! histogram of number of nodes in each grain, numbered the same as enumer
+    REAL(C_REAL),DIMENSION(:,:),ALLOCATABLE     :: grain_location   ! Sample point within the grain
     INTEGER(C_INT)                              :: max_grain_index  ! Highest integer in enumer. Put here to avoid recalculation.
     INTEGER(C_INT)                              :: num_grains       ! Number of grains in crystal
     INTEGER(C_INT)                              :: max_grain_size   ! number of nodes inside of biggest grain
@@ -85,6 +88,63 @@ MODULE basictypes
   END TYPE lattice
 
 CONTAINS
+
+  ! (Re)Initialize important counters in lattice structure
+  ! USAGE: CALL init_lattice(which_lattice)
+  SUBROUTINE init_lattice(which_lattice)
+    USE FileHandling, only: stderr
+    IMPLICIT NONE
+    TYPE(lattice),INTENT(INOUT)                 :: which_lattice
+
+    IF( ALLOCATED(which_lattice%nodes)) THEN
+      IF( which_lattice%num_nodes .ne. SIZE(which_lattice%nodes) ) THEN
+        WRITE(stderr,'(A,I8)') "WARNING: Nodes already allocated: lattice reported ", which_lattice%num_nodes, " nodes"
+        WRITE(stderr,'(A,I8,A)') "   but there were ",SIZE(which_lattice%nodes)," nodes allocated."
+        WRITE(stderr,'(A,I8,A)') "   Correcting node count to ",SIZE(which_lattice%nodes),"."
+        which_lattice%num_nodes = SIZE(which_lattice%nodes)
+      END IF
+    ELSE
+      IF( which_lattice%num_nodes .ne. 0 ) THEN
+        WRITE(stderr,'(A,I8)') "WARNING: Lattice reported ", which_lattice%num_nodes, " nodes"
+        WRITE(stderr,'(A)') "   but there were 0 nodes allocated."
+        WRITE(stderr,'(A,I8,A)') "   Correcting node count to ",0,"."
+      END IF
+      which_lattice%num_nodes = 0
+    END IF
+
+    IF( ALLOCATED(which_lattice%edges)) THEN
+      IF( which_lattice%num_edges .ne. SIZE(which_lattice%edges) ) THEN
+        WRITE(stderr,'(A,I8)') "WARNING: Edges already allocated: lattice reported ", which_lattice%num_edges, " edges"
+        WRITE(stderr,'(A,I8,A)') "   but there were ",SIZE(which_lattice%edges)," edges allocated."
+        WRITE(stderr,'(A,I8,A)') "   Correcting edge count to ",SIZE(which_lattice%edges),"."
+        which_lattice%num_edges = SIZE(which_lattice%edges)
+      END IF
+    ELSE
+      IF( which_lattice%num_edges .ne. 0 ) THEN
+        WRITE(stderr,'(A,I8)') "WARNING: Lattice reported ", which_lattice%num_edges, " edges"
+        WRITE(stderr,'(A)') "   but there were 0 edges allocated."
+        WRITE(stderr,'(A,I8,A)') "   Correcting edge count to ",0,"."
+      END IF
+      which_lattice%num_edges = 0
+    END IF
+
+    IF( ALLOCATED(which_lattice%cells)) THEN
+      IF( which_lattice%num_cells .ne. SIZE(which_lattice%cells) ) THEN
+        WRITE(stderr,'(A,I8)') "WARNING: Cells already allocated: lattice reported ", which_lattice%num_cells, " cells"
+        WRITE(stderr,'(A,I8,A)') "   but there were ",SIZE(which_lattice%cells)," cells allocated."
+        WRITE(stderr,'(A,I8,A)') "   Correcting cell count to ",SIZE(which_lattice%cells),"."
+        which_lattice%num_cells = SIZE(which_lattice%cells)
+      END IF
+    ELSE
+      IF( which_lattice%num_cells .ne. 0 ) THEN
+        WRITE(stderr,'(A,I8)') "WARNING: Lattice reported ", which_lattice%num_cells, " cells"
+        WRITE(stderr,'(A)') "   but there were 0 cells allocated."
+        WRITE(stderr,'(A,I8,A)') "   Correcting cell count to ",0,"."
+      END IF
+      which_lattice%num_cells = 0
+    END IF
+    which_lattice%num_grains = 0
+  END SUBROUTINE init_lattice
 
   ! Properly deallocate a lattice_node
   ! USAGE: CALL deallocate_lattice_node(which_node)
@@ -140,6 +200,7 @@ CONTAINS
       WRITE(stderr,'(A)') "   but there were 0 cells to deallocate."
     END IF
     IF( ALLOCATED(which_lattice%grain_size_array) ) DEALLOCATE(which_lattice%grain_size_array)
+    IF( ALLOCATED(which_lattice%grain_location) ) DEALLOCATE(which_lattice%grain_location)
   END SUBROUTINE deallocate_lattice
 
 END MODULE basictypes
