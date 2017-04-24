@@ -3,26 +3,44 @@ module kindprecision
   implicit none
 
   ! default kinds
-  integer (kind(1)),parameter ::ikind=(kind(1))                 ! default precision level for integers
-  integer (kind(1)),parameter ::sikind = selected_int_kind(5)   ! short integers - range = +/- 10^5
-  integer (kind(1)),parameter ::likind = selected_int_kind(10)  ! long integers - range = +/- 10^10
-  integer (kind(1)),parameter ::fkind=(kind(0.e0))              ! default precision level for floats
-  integer (kind(1)),parameter ::dkind=(kind(0.d0))              ! default precision level for doubles
+  integer,parameter           ::ikind=(kind(1))                 ! default range for integers
+  integer,parameter           ::sikind = selected_int_kind(5)   ! short integers - range = +/- 10^5
+  integer,parameter           ::likind = selected_int_kind(10)  ! long integers - range = +/- 10^10
+  integer,parameter           ::fkind=(kind(0.e0))              ! default precision level for floats
+  integer,parameter           ::dkind=(kind(0.d0))              ! default precision level for doubles
 
   ! custom kinds - set precision and range here using defaults, iso_fortran_env constants, or selected_real_kind intrinsic
-  integer(ikind),parameter    :: SP = fkind                     ! custom single precision for float vars and constants
-  integer(ikind),parameter    :: DP = dkind                     ! custom double precision for double vars and constants
+  integer,parameter           :: SP = fkind                     ! custom single precision for float vars and constants
+  integer,parameter           :: DP = dkind                     ! custom double precision for double vars and constants
   INTEGER, PARAMETER          :: StrBuffLen = 256
 
   ! selected_real_kind(p,r) will select the smallest kind of floating point storage that can store a float with
   ! precision of at least p decimal places and a range of at least +/- 10^r
+  !
+  ! These must be the kind parameter corresponding to MPI_DOUBLE_PRECISION
+  ! and MPI_REAL
+  !
+  integer, parameter  :: psb_dpk_ = kind(1.d0)
+  integer, parameter  :: psb_spk_ = kind(1.e0)
+
+  integer, parameter :: RWP = psb_dpk_  ! real precision used thoughout the program quick switch
+  integer, parameter :: IWP = ikind     ! integer range used in indices thoughout the program, quick switch incase integer width for indices needs to be increased
+  integer, parameter :: KR4 = 4 !selected_real_kind(6,37)       ! single precision real
+  integer, parameter :: KR8 = 8  !selected_real_kind(15,307)     ! double precision real
+  integer, parameter :: KI4 = 4  !selected_int_kind(9)           ! single precision integer
+  integer, parameter :: KI8 = 8  !selected_int_kind(18)          ! double precision integer
+
+  integer, parameter :: METIS_IDX_T = 4    !this is to make portanolity with METIS library since they say
+                                             ! in C, int can change with system but int32_t is consta
+  integer, parameter :: METIS_REAL_T = 4    !this is to make portanolity with METIS library since they say
+                                             ! in C, int can change with system but real_t is constant
 
 end module kindprecision
 
 module physical_constants
   use kindprecision
   implicit none
-  REAL(fkind),PARAMETER                             :: k_B = 8.6173303e-5   ! Boltzmann constant in eV/K
+  REAL(RWP),PARAMETER                             :: k_B = 8.6173303d-5   ! Boltzmann constant in eV/K
 end module physical_constants
 
 module tools
@@ -46,12 +64,12 @@ contains
   SUBROUTINE find_neighbors(I,J,max_i,max_j,IP1,IM1,JP1,JM1)
     ! rows: assumes that min for I is 1, the max is max_i, and the universe is 0
     ! columns: assumes that min for J is 1 and the max is max_j, and the universe is 0
-    USE kindprecision, only: ikind
+    USE kindprecision, only: IWP
     IMPLICIT NONE
-    INTEGER(IKIND),INTENT(IN)         :: I,J        ! indices of interest
-    INTEGER(IKIND),INTENT(IN)         :: max_i,max_j    ! max values for I and J
-    INTEGER(IKIND),INTENT(OUT)        :: IP1,IM1    ! neighbors for I, one step away
-    INTEGER(IKIND),INTENT(OUT)        :: JP1,JM1    ! neighbors for J, one step away
+    INTEGER(IWP),INTENT(IN)         :: I,J        ! indices of interest
+    INTEGER(IWP),INTENT(IN)         :: max_i,max_j    ! max values for I and J
+    INTEGER(IWP),INTENT(OUT)        :: IP1,IM1    ! neighbors for I, one step away
+    INTEGER(IWP),INTENT(OUT)        :: JP1,JM1    ! neighbors for J, one step away
 
     ! I plus one, I minus one, and so on
     ip1 = i+1
@@ -76,12 +94,12 @@ contains
   SUBROUTINE find_neighbors_periodic(I,J,max_i,max_j,IP1,IM1,JP1,JM1)
     ! rows: assumes that min for I is 1 and the max is max_i
     ! columns: assumes that min for J is 1 and the max is max_j
-    USE kindprecision, only: ikind
+    USE kindprecision, only: IWP
     IMPLICIT NONE
-    INTEGER(IKIND),INTENT(IN)         :: I,J        ! indices of interest
-    INTEGER(IKIND),INTENT(IN)         :: max_i,max_j    ! max values for I and J
-    INTEGER(IKIND),INTENT(OUT)        :: IP1,IM1    ! neighbors for I, one step away
-    INTEGER(IKIND),INTENT(OUT)        :: JP1,JM1    ! neighbors for J, one step away
+    INTEGER(IWP),INTENT(IN)         :: I,J        ! indices of interest
+    INTEGER(IWP),INTENT(IN)         :: max_i,max_j    ! max values for I and J
+    INTEGER(IWP),INTENT(OUT)        :: IP1,IM1    ! neighbors for I, one step away
+    INTEGER(IWP),INTENT(OUT)        :: JP1,JM1    ! neighbors for J, one step away
 
     ! I plus one, I minus one, and so on
     ip1 = i+1
@@ -106,12 +124,12 @@ contains
   SUBROUTINE find_neighbors_column_periodic(I,J,max_i,max_j,IP1,IM1,JP1,JM1)
     ! columns: assumes that min for I is 1 and the max is max_i
     ! rows: assumes that min for J is 1 and the max is max_j, and the universe is 0
-    USE kindprecision, only: ikind
+    USE kindprecision, only: IWP
     IMPLICIT NONE
-    INTEGER(IKIND),INTENT(IN)         :: I,J        ! indices of interest
-    INTEGER(IKIND),INTENT(IN)         :: max_i,max_j    ! max values for I and J
-    INTEGER(IKIND),INTENT(OUT)        :: IP1,IM1    ! neighbors for I, one step away
-    INTEGER(IKIND),INTENT(OUT)        :: JP1,JM1    ! neighbors for J, one step away
+    INTEGER(IWP),INTENT(IN)         :: I,J        ! indices of interest
+    INTEGER(IWP),INTENT(IN)         :: max_i,max_j    ! max values for I and J
+    INTEGER(IWP),INTENT(OUT)        :: IP1,IM1    ! neighbors for I, one step away
+    INTEGER(IWP),INTENT(OUT)        :: JP1,JM1    ! neighbors for J, one step away
 
     ! I plus one, I minus one, and so on
     ip1 = i+1
@@ -137,12 +155,12 @@ contains
   SUBROUTINE find_neighbors_row_periodic(I,J,max_i,max_j,IP1,IM1,JP1,JM1)
     ! columns: assumes that min for I is 1 and the max is max_i, and the universe is 0
     ! rows: assumes that min for J is 1 and the max is max_j
-    USE kindprecision, only: ikind
+    USE kindprecision, only: IWP
     IMPLICIT NONE
-    INTEGER(IKIND),INTENT(IN)         :: I,J        ! indices of interest
-    INTEGER(IKIND),INTENT(IN)         :: max_i,max_j    ! max values for I and J
-    INTEGER(IKIND),INTENT(OUT)        :: IP1,IM1    ! neighbors for I, one step away
-    INTEGER(IKIND),INTENT(OUT)        :: JP1,JM1    ! neighbors for J, one step away
+    INTEGER(IWP),INTENT(IN)         :: I,J        ! indices of interest
+    INTEGER(IWP),INTENT(IN)         :: max_i,max_j    ! max values for I and J
+    INTEGER(IWP),INTENT(OUT)        :: IP1,IM1    ! neighbors for I, one step away
+    INTEGER(IWP),INTENT(OUT)        :: JP1,JM1    ! neighbors for J, one step away
 
     ! I plus one, I minus one, and so on
     ip1 = i+1

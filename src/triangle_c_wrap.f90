@@ -1,8 +1,8 @@
 MODULE triangle_c_wrap
   USE, INTRINSIC:: ISO_C_BINDING, only: C_PTR, C_INT, C_FLOAT, C_CHAR, C_DOUBLE
   IMPLICIT NONE
-  
-  INTEGER,PARAMETER :: C_REAL = C_DOUBLE       ! triangle.c can switch its REAL type between FLOAT and DOUBLE 
+
+  INTEGER,PARAMETER :: C_REAL = C_DOUBLE       ! triangle.c can switch its REAL type between FLOAT and DOUBLE
                                                ! based on compilation options. match it here
 
   ! Fortran mirror of triangulateio struct in triangle_lib/triangle.h
@@ -103,7 +103,7 @@ MODULE triangle_c_wrap
     ! USAGE: call copytriangles_c_to_f(c_shapes,f_shapes)
     SUBROUTINE copytriangles_c_to_f(c_shapes,f_shapes)
       USE, INTRINSIC:: ISO_C_BINDING, only: c_f_pointer
-      USE filehandling, only: stderr
+      USE, INTRINSIC:: ISO_FORTRAN_ENV, only: stderr => OUTPUT_UNIT
       IMPLICIT NONE
       TYPE(triangulateio),INTENT(IN)    :: c_shapes
       TYPE(f_triangulateio),INTENT(OUT) :: f_shapes
@@ -322,12 +322,12 @@ MODULE triangle_c_wrap
       c_shapes%neighborlist = ctrimalloc(INT(3*numberoftriangles*SIZEOF(dumint),C_INT))
       CALL c_f_pointer(c_shapes%neighborlist, f_shapes%neighborlist, [3*numberoftriangles])
     END SUBROUTINE allocate_neighborlist
-    
+
     SUBROUTINE init_outputs(c_shape)
       USE, INTRINSIC:: ISO_C_BINDING, only: C_NULL_PTR
       IMPLICIT NONE
       TYPE(triangulateio),INTENT(INOUT)   :: c_shape
-      
+
       c_shape%pointlist = C_NULL_PTR
       c_shape%pointattributelist = C_NULL_PTR
       c_shape%pointmarkerlist = C_NULL_PTR
@@ -357,13 +357,13 @@ MODULE triangle_c_wrap
       c_shape%normlist = C_NULL_PTR
       c_shape%numberofedges = 0
     END SUBROUTINE init_outputs
-    
+
     SUBROUTINE deallocate_triangulateio(f_shape,input,neigh,voroni)
       IMPLICIT NONE
-      
+
       TYPE(f_triangulateio),INTENT(INOUT)   :: f_shape
       LOGICAL                               :: input,neigh,voroni
-      
+
       if(f_shape%numberofpoints .NE. 0)deallocate(f_shape%pointlist)
       if(f_shape%numberofpoints*f_shape%numberofpointattributes .NE. 0)deallocate(f_shape%pointattributelist)
       if(f_shape%numberofpoints .NE. 0)deallocate(f_shape%pointmarkerlist)

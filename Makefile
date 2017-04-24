@@ -4,7 +4,7 @@ FC = gfortran # fortran
 
 # Flags
 # Fortran Debugging
-FCLFLAGS = -g -fbounds-check -fbacktrace -Wall 
+FCLFLAGS = -g -fbounds-check -fbacktrace -Wall
 FCFLAGS =  -g -fbounds-check -fbacktrace -Wall -J $(OBJDIR)
 
 # Fortran optimization
@@ -28,26 +28,26 @@ PROGRAMS = $(addprefix $(BINDIR)/,read_poly_to_vtk)
 # All directive. What make will make by default
 all:$(TESTS) $(PROGRAMS)
 
-# Linker dependencies. List the object files that need to be linked to 
+# Linker dependencies. List the object files that need to be linked to
 # create the executables.
 
-$(BINDIR)/read_poly_to_vtk: $(addprefix $(OBJDIR)/,read_poly_to_vtk.o triangle_output.o triangle_c_wrap.o triangle_input.o filehandling.o math_tools.o) triangle_lib/triangle.o
+$(BINDIR)/read_poly_to_vtk: $(addprefix $(OBJDIR)/,read_poly_to_vtk.o triangle_output.o triangle_c_wrap.o triangle_input.o mFileHandling.o math_tools.o) triangle_lib/triangle.o
 
 #Executable Object dependencies. List object files that depend on modules from other object files here
 
-$(OBJDIR)/read_poly_to_vtk.o: $(addprefix $(OBJDIR)/,triangle_output.o triangle_c_wrap.o triangle_input.o filehandling.o)
+$(OBJDIR)/read_poly_to_vtk.o: $(addprefix $(OBJDIR)/,triangle_output.o triangle_c_wrap.o triangle_input.o mFileHandling.o)
 
 #Module Object dependencies. List module object files that depend on modules from other object files here
 
 $(OBJDIR)/basictypes.o: $(addprefix $(OBJDIR)/,math_tools.o triangle_c_wrap.o)
 
-$(OBJDIR)/triangle_c_wrap.o: $(OBJDIR)/filehandling.o triangle_lib/triangle.o
+$(OBJDIR)/triangle_c_wrap.o: triangle_lib/triangle.o
 
-$(OBJDIR)/triangle_input.o: $(addprefix $(OBJDIR)/,triangle_c_wrap.o filehandling.o math_tools.o)
+$(OBJDIR)/triangle_input.o: $(addprefix $(OBJDIR)/,triangle_c_wrap.o mFileHandling.o math_tools.o)
 
-$(OBJDIR)/triangle_output.o: $(addprefix $(OBJDIR)/,triangle_c_wrap.o filehandling.o)
+$(OBJDIR)/triangle_output.o: $(addprefix $(OBJDIR)/,triangle_c_wrap.o mFileHandling.o)
 
-$(OBJDIR)/qmap_input.o: $(addprefix $(OBJDIR)/,basictypes.o filehandling.o)
+$(OBJDIR)/qmap_input.o: $(addprefix $(OBJDIR)/,basictypes.o mFileHandling.o)
 
 # target for Triangle lib
 triangle_lib/triangle.o : triangle_lib/triangle.c triangle_lib/triangle.h
@@ -65,7 +65,7 @@ $(OBJDIR)/%.o: $(PROGDIR)/%.f90 | $(OBJDIR)
 	$(FC) $(FCFLAGS) -o $@ -c $<
 
 # directory setup
-	
+
 $(BINDIR):
 	mkdir $(BINDIR)
 
@@ -83,16 +83,16 @@ $(PROGDIR):
 	mkdir $(PROGDIR)
 
 # Utility targets
-.PHONY: all cleanobj cleanbin clean cleantriobj 
+.PHONY: all cleanobj cleanbin clean cleantriobj
 
 cleanobj:
-	rm -f *.mod $(OBJDIR)/*.o $(OBJDIR)/*.mod $(OBJDIR)/*.MOD $(OBJDIR)/*~ 
-	
+	rm -f *.mod $(OBJDIR)/*.o $(OBJDIR)/*.mod $(OBJDIR)/*.MOD $(OBJDIR)/*~
+
 cleantriobj:
 	rm -f triangle_lib/*.mod triangle_lib/*.o
 
 cleanbin:
-	rm -rf $(BINDIR)/* 
+	rm -rf $(BINDIR)/*
 
 clean: cleanbin cleanobj cleantriobj
 	rm -f *~ $(SRCDIR)/*~ *.mod
@@ -100,4 +100,3 @@ clean: cleanbin cleanobj cleantriobj
 tests: $(TESTS)
 
 programs: $(PROGRAMS)
-

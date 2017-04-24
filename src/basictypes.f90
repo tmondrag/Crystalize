@@ -6,7 +6,7 @@
 !   delivered 06 Feb 2016
 
 ! Subroutines
-!   init_lattic(which_lattice)
+!   init_lattice(which_lattice)
 !   deallocate_lattice_node(which_node)
 !   deallocate_lattice(which_lattice)
 

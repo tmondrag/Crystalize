@@ -9,45 +9,46 @@ MODULE qmap_input
 
 CONTAINS
 
-  ! Read input from Q-map dat file into a lattice data structure
+  ! Read input from Q-map data file into a lattice data structure
   ! USAGE: lattice_data = read_Qmap(filename)
   FUNCTION read_Qmap(filename) RESULT(lattice_data)
-    USE filehandling, only: safeopen_readonly, stderr
+    USE mFileHandling, only: FILE, stderr
     USE basictypes, only: lattice
     IMPLICIT NONE
 
     CHARACTER(LEN=256),INTENT(IN)                     :: filename
     TYPE(lattice)                                     :: lattice_data
     INTEGER,DIMENSION(:),ALLOCATABLE                  :: Q
-    INTEGER                                           :: fd,ios
+    TYPE(FILE)                                        :: inputFile
+    INTEGER                                           :: ios
     INTEGER                                           :: is_grid
     INTEGER                                           :: num_cols,num_rows,col_i,row_j
     LOGICAL                                           :: qstate_present
 
-    fd = safeopen_readonly(filename)
-    CALL skip_comments_Qmap(fd)
+    CALL inputFile%openReadOnly(filename)
+    CALL skip_comments_Qmap(inputFile)
     ! 0 =: aperiodic, 1 =: periodic in y, 2 =: periodic in x, 3 =: periodic everywhere
-    READ(fd,*,iostat=ios,err=900) lattice_data%periodicity
-    CALL skip_comments_Qmap(fd)
+    READ(inputFile%getFunit(),*,iostat=ios,err=900) lattice_data%periodicity
+    CALL skip_comments_Qmap(inputFile)
     ! temperature of crystal during evolution (useful during Potts generation)
-    READ(fd,*,iostat=ios,err=600) lattice_data%temperature
-    CALL skip_comments_Qmap(fd)
+    READ(inputFile%getFunit(),*,iostat=ios,err=600) lattice_data%temperature
+    CALL skip_comments_Qmap(inputFile)
     ! constant used in grain boundary energy calculations (electronVolts per ?m)
-    READ(fd,*,iostat=ios,err=700) lattice_data%en_per_length
-    CALL skip_comments_Qmap(fd)
+    READ(inputFile%getFunit(),*,iostat=ios,err=700) lattice_data%en_per_length
+    CALL skip_comments_Qmap(inputFile)
     ! number of possible discrete states
-    READ(fd,*,iostat=ios,err=500) lattice_data%num_states
-    CALL skip_comments_Qmap(fd)
+    READ(inputFile%getFunit(),*,iostat=ios,err=500) lattice_data%num_states
+    CALL skip_comments_Qmap(inputFile)
     ! whether or not the qmap data is presented in a predefined grid or not
-    READ(fd,*,iostat=ios) is_grid
+    READ(inputFile%getFunit(),*,iostat=ios) is_grid
     IF(is_grid .ne. 0) THEN
       ! Data is presented in a grid - nodes are only denoted by their state. Ask for x and y gridspacing
-      CALL skip_comments_Qmap(fd)
-      READ(fd,*,iostat=ios,err=200) lattice_data%x_bounds
-      CALL skip_comments_Qmap(fd)
-      READ(fd,*,iostat=ios,err=250) lattice_data%y_bounds
-      CALL skip_comments_Qmap(fd)
-      READ(fd,*,iostat=ios,err=300) lattice_data%grid_spacing
+      CALL skip_comments_Qmap(inputFile)
+      READ(inputFile%getFunit(),*,iostat=ios,err=200) lattice_data%x_bounds
+      CALL skip_comments_Qmap(inputFile)
+      READ(inputFile%getFunit(),*,iostat=ios,err=250) lattice_data%y_bounds
+      CALL skip_comments_Qmap(inputFile)
+      READ(inputFile%getFunit(),*,iostat=ios,err=300) lattice_data%grid_spacing
       num_cols = FLOOR((lattice_data%x_bounds(2) - lattice_data%x_bounds(1))/lattice_data%grid_spacing(1))
       num_rows = FLOOR((lattice_data%y_bounds(2) - lattice_data%y_bounds(1))/lattice_data%grid_spacing(2))
       IF(lattice_data%x_bounds(2) .gt. lattice_data%x_bounds(1) + lattice_data%grid_spacing(1) * REAL(num_cols)) THEN
@@ -65,15 +66,15 @@ CONTAINS
       WRITE(stderr,'(A,F9.4,A,I4)') "  x spacing:",lattice_data%grid_spacing(1)," x levels: ",num_cols
       WRITE(stderr,'(A,F9.4,A,F9.4)') "  y range:",lattice_data%y_bounds(1)," - ",lattice_data%y_bounds(2)
       WRITE(stderr,'(A,F9.4,A,I4)') "  y spacing:",lattice_data%grid_spacing(2)," y levels: ",num_rows
-      CALL skip_comments_Qmap(fd)
+      CALL skip_comments_Qmap(inputFile)
       ! Number of sweeps used to generate (evolve) this grid. Used only if generating sample data
-      READ(fd,*,iostat=ios,err=400) lattice_data%mc_sweeps
+      READ(inputFile%getFunit(),*,iostat=ios,err=400) lattice_data%mc_sweeps
       ! now allocate the node array
       ALLOCATE(lattice_data%nodes(1:num_cols*num_rows))
       ALLOCATE(Q(1:num_cols*num_rows))
       lattice_data%num_nodes = num_cols*num_rows
-      CALL skip_comments_Qmap(fd)
-      READ(fd,*,iostat=ios,err=100) Q
+      CALL skip_comments_Qmap(inputFile)
+      READ(inputFile%getFunit(),*,iostat=ios,err=100) Q
       DO row_j=0,num_rows-1
         DO col_i=1,num_cols
           lattice_data%nodes(col_i+row_j*num_cols)%q_state = Q(col_i+row_j*num_cols)
@@ -88,23 +89,24 @@ CONTAINS
       DEALLOCATE(Q)
     ELSE
       ! Data is freeform - nodes are listed with a location and a state(maybe)
-      CALL skip_comments_Qmap(fd)
+      CALL skip_comments_Qmap(inputFile)
       ! are the q-states already in the input?
-      READ(fd,*,iostat=ios) is_grid
+      READ(inputFile%getFunit(),*,iostat=ios) is_grid
       qstate_present = (is_grid .eq. 1)
       is_grid = 0
-      CALL skip_comments_Qmap(fd)
+      CALL skip_comments_Qmap(inputFile)
       ! number of nodes
-      READ(fd,*,iostat=ios,err=150) lattice_data%num_nodes
+      READ(inputFile%getFunit(),*,iostat=ios,err=150) lattice_data%num_nodes
       ! now allocate the node array
       ALLOCATE(lattice_data%nodes(1:lattice_data%num_nodes))
-      CALL skip_comments_Qmap(fd)
+      CALL skip_comments_Qmap(inputFile)
       DO row_j = 1,lattice_data%num_nodes
         IF(qstate_present) THEN
-          READ(fd,*,iostat=ios,err=100) lattice_data%nodes(row_j)%location(1), lattice_data%nodes(row_j)%location(2), &
-            lattice_data%nodes(row_j)%q_state
+          READ(inputFile%getFunit(),*,iostat=ios,err=100) lattice_data%nodes(row_j)%location(1), &
+            lattice_data%nodes(row_j)%location(2), lattice_data%nodes(row_j)%q_state
         ELSE
-          READ(fd,*,iostat=ios,err=100) lattice_data%nodes(row_j)%location(1), lattice_data%nodes(row_j)%location(2)
+          READ(inputFile%getFunit(),*,iostat=ios,err=100) lattice_data%nodes(row_j)%location(1), &
+            lattice_data%nodes(row_j)%location(2)
         END IF
       END DO
     END IF
@@ -133,16 +135,17 @@ CONTAINS
   END FUNCTION read_Qmap
 
 
-  SUBROUTINE skip_comments_Qmap(fd)
+  SUBROUTINE skip_comments_Qmap(inputFile)
+    USE mFileHandling, only: FILE
     IMPLICIT NONE
-    INTEGER, INTENT(IN)                               :: fd   ! FILE DESCRIPTOR NUMBER
+    TYPE(FILE),INTENT(INOUT)                          :: inputFile
     CHARACTER(LEN=256)                                :: buffer
 
     ReadComments: DO
-      READ(fd, '(A)', END=100) buffer
+      READ(inputFile%getFunit(), '(A)', END=100) buffer
       IF((buffer(1:1) /= "#") .AND. (TRIM(buffer) /= "")) exit ReadComments
     END DO ReadComments
-    BACKSPACE(fd)
+    BACKSPACE(inputFile%getFunit())
 100 CONTINUE
   END SUBROUTINE skip_comments_Qmap
 END MODULE qmap_input
