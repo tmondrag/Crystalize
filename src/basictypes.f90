@@ -3,7 +3,7 @@
 ! USACE ERDC Information Technology Laboratory
 ! Computational Analysis Branch
 ! Tomas.A.Mondragon@erdc.dren.mil
-!   delivered 06 Feb 2016
+!   delivered 06 May 2017
 
 ! Subroutines
 !   init_lattice(which_lattice)
@@ -16,191 +16,256 @@ MODULE basictypes
   IMPLICIT NONE
 
   ! data types
-  ! lattice node - measured and quantified points from the input plus some derived info
-  TYPE lattice_node
-    INTEGER(C_INT)                              :: n_index          ! self-referential index for convenience
-    !INTEGER(C_INT),DIMENSION(:),ALLOCATABLE     :: neigh_edges      ! array of indices to connected edges(Not useful, may not be allocated and populated to save time)
-    !INTEGER(C_INT),DIMENSION(:),ALLOCATABLE     :: neigh_cells      ! array of indices to connected cells(Not useful, may not be allocated and populated to save time)
-    LOGICAL(C_BOOL)                             :: is_universe      ! flag for special universal nodes
-    LOGICAL(C_BOOL)                             :: is_boundary      ! boundary marker flag
-    REAL(C_REAL),DIMENSION(1:2)                 :: location         ! x-y coordinates of node
-    INTEGER(C_INT)                              :: q_state          ! discretized state (spin state, orthogonal orientation state)
-    REAL(C_REAL)                                :: major_axis       ! non-discretized state (orientation)
-    INTEGER(C_INT)                              :: enumer           ! node membership in an enumerated grain
-    REAL(C_REAL)                                :: enrg_node        ! partial energy of node (Half the sum of partial energies of connected edges)
-  END TYPE lattice_node
+  ! Lattice types - DCEL and winded edge data stuctures won't do well, since Triangle's data stucture is point centered rater than edge centered
+  ! lattice vertex - measured and quantified points from the input plus some derived info
+  TYPE LatticeVertex
+    INTEGER(C_INT)                              :: nIndex           ! self-referential index for convenience
+    INTEGER(C_INT)                              :: boundary         ! boundary marker flag
+    REAL(C_REAL),DIMENSION(1:2)                 :: location         ! x-y coordinates of vertex
+    INTEGER(C_INT)                              :: qState           ! discretized state (spin state, orthogonal orientation state)
+    INTEGER(C_INT)                              :: enumer           ! vertex membership in an enumerated grain
+    REAL(C_REAL)                                :: enrgVertex       ! partial energy of vertex (Half the sum of partial energies of connected edges)
+  END TYPE LatticeVertex
 
-  ! Lattice edge - line segments connecting  the nodes and bounding the cells
-  TYPE lattice_edge
-    INTEGER(C_INT)                              :: e_index          ! self-referential index for convenience
-    INTEGER(C_INT),DIMENSION(1:2)               :: neigh_cells      ! array of indices to connected cells
-    INTEGER(C_INT),DIMENSION(1:2)               :: neigh_nodes      ! array of indices to connected nodes
-    LOGICAL(C_BOOL)                             :: is_broken        ! flag indicating that boundary intersects edge
-    LOGICAL(C_BOOL)                             :: was_traversed    ! flag marking whether boundary finder has already visited or not
-    LOGICAL(C_BOOL)                             :: is_universe      ! flag for special universal nodes
-    LOGICAL(C_BOOL)                             :: is_boundary      ! boundary marker flag
-    REAL(C_REAL)                                :: enrg_edge        ! partial energy of edge
+  ! Lattice edge - line segments connecting  the vertices and bounding the facets
+  TYPE LatticeEdge
+    INTEGER(C_INT)                              :: eIndex           ! self-referential index for convenience
+    LOGICAL(C_BOOL)                             :: isBroken         ! flag indicating that boundary intersects edge
+    LOGICAL(C_BOOL)                             :: wasTraversed     ! flag marking whether boundary finder has already visited or not
+    LOGICAL(C_BOOL)                             :: is_fake          ! flag marking edge used to implement holes in fancy polygons
+    INTEGER(C_INT)                              :: boundary         ! boundary marker flag
+    REAL(C_REAL)                                :: enrgEdge         ! partial energy of edge
     REAL(C_REAL),DIMENSION(1:2)                 :: center           ! center of edge
-    INTEGER(C_INT)                              :: enumer           ! edge membership in a grain
     REAL(C_REAL)                                :: orientation      ! orientation angle (in radians, (0,pi))
     REAL(C_REAL)                                :: length           ! length of edge
-  END TYPE lattice_edge
+    !turn into ints. cant point into an array
+    INTEGER(C_INT)                              :: primoVertex      ! index to one of this edge's endpoints
+    INTEGER(C_INT)                              :: secundoVertex    ! index to the other edge endpoints
+    INTEGER(C_INT)                              :: dexterFacet      ! index to the facet to the right of the edge
+    INTEGER(C_INT)                              :: sinesterFacet    ! index to the facet to the left of the edge
+  END TYPE LatticeEdge
 
-  ! lattice cell - triangular elements bounded by three neighboring nodes and three neighboring edges
-  TYPE lattice_cell
-    INTEGER(C_INT)                              :: c_index          ! self-referential index for convenience
-    INTEGER(C_INT),DIMENSION(1:3)               :: neigh_nodes      ! array of indices to connected nodes
-    INTEGER(C_INT),DIMENSION(1:3)               :: neigh_edges      ! array of indices to connected edges
-    INTEGER(C_INT),DIMENSION(1:3)               :: broken_edges     ! flags to indicate which edges are broken
-    INTEGER(C_INT)                              :: num_broken_edges ! also useful for classifying cell quickly
-    INTEGER(C_INT)                              :: num_traversals   ! number of times cell was traversed by boundary finder
-    INTEGER(C_INT)                              :: q_state          ! discretized state (spin state, orthogonal orientation state)
-    REAL(C_REAL)                                :: major_axis       ! non-discretized state (orientation)
-    REAL(C_REAL),DIMENSION(1:2)                 :: center           ! Fermat point of triangular cell
-    INTEGER(C_INT)                              :: enumer           ! cell membership in an enumerated grain
-    REAL(C_REAL)                                :: enrg_cell        ! partial energy for cell (Half the sum of partial energies of connected edges)
-    LOGICAL(C_BOOL)                             :: is_universe      ! flag for special universal cells
-  END TYPE lattice_cell
+  ! Lattice facet - triangular elements bounded by three neighboring nodes and three neighboring edges (or it can have more if you are doing something fancy)
+  TYPE LatticeFacet
+    INTEGER(C_INT)                              :: fIndex           ! self-referential index for convenience
+    INTEGER(C_INT)                              :: numBrokenEdges   ! Count of edges crossed by boundary, also useful for classifying the facet/boundary type
+    INTEGER(C_INT)                              :: numTraversals    ! number of times facet was traversed by boundary finder
+    REAL(C_REAL),DIMENSION(1:2)                 :: center           ! Fermat point of triangular facet
+    REAL(C_REAL)                                :: area             ! area of facet
+    REAL(C_REAL)                                :: enrgFacet        ! partial energy for facet (Half the sum of partial energies of connected edges)
+    LOGICAL(C_BOOL)                             :: isUniverse       ! flag for special universal facet
+    INTEGER(C_INT)                              :: primoVertex      ! index to one of this facet's vertices
+    INTEGER(C_INT)                              :: secundoVertex    ! index to the next vertex in clockwise order
+    INTEGER(C_INT)                              :: tertioVertex     ! index to the third vertex in clockwise order
+    INTEGER(C_INT)                              :: primoEdge        ! index to one of this facet's edges
+    INTEGER(C_INT)                              :: secundoEdge      ! index to the next edge in clockwise order
+    INTEGER(C_INT)                              :: tertioEdge       ! index to the third edge in clockwise order
+  END TYPE latticeFacet
 
-  ! lattice - container for raw and simplistic data. Nodes, cells, edges, & attached info
-  TYPE lattice
-    TYPE(lattice_node),DIMENSION(:),ALLOCATABLE :: nodes            ! array of nodes
-    TYPE(lattice_edge),DIMENSION(:),ALLOCATABLE :: edges            ! array of edges
-    TYPE(lattice_cell),DIMENSION(:),ALLOCATABLE :: cells            ! array of cells
-    INTEGER(C_INT)                              :: num_nodes        ! number of nodes for quick reference
-    INTEGER(C_INT)                              :: num_edges        ! number of edges for quick reference
-    INTEGER(C_INT)                              :: num_cells        ! number of cells for quick reference
+  ! Lattice facet search data structure list item
+  TYPE LatticeFacetSItem
+    LOGICAL(C_BOOL)                             :: isHead
+    INTEGER(C_INT)                              :: vertexIndex
+    INTEGER(C_INT)                              :: facetIndex
+    TYPE(LatticeFacetSItem),POINTER             :: next
+  CONTAINS
+    PROCEDURE :: init   => init_lattice_facet_list
+    PROCEDURE :: push   => push_lattice_facet_list
+    PROCEDURE :: pop    => pop_lattice_facet_list
+    PROCEDURE :: delete => delete_lattice_facet_list
+    PROCEDURE :: search => search_lattice_facet_list
+  END TYPE LatticeFacetSItem
+
+  ! Lattice facet search data structure list head/array item
+  TYPE LatticeFacetSHead
+    TYPE(LatticeFacetSItem)                     :: listHead
+  END TYPE LatticeFacetSHead
+
+  ! Lattice - container for raw and simplistic data. vertices, facets, edges, & attached info
+  TYPE Lattice
+    TYPE(LatticeVertex),DIMENSION(:),ALLOCATABLE:: vertices         ! array of vertices
+    TYPE(LatticeEdge),DIMENSION(:),ALLOCATABLE  :: edges            ! array of edges
+    TYPE(LatticeFacet),DIMENSION(:),ALLOCATABLE :: facets           ! array of facets
+    TYPE(LatticeFacetSHead),DIMENSION(:),ALLOCATABLE:: facetReference
+    INTEGER(C_INT)                              :: numVertices      ! number of vertices for quick reference
+    INTEGER(C_INT)                              :: numEdges         ! number of edges for quick reference
+    INTEGER(C_INT)                              :: numFacets        ! number of facets for quick reference
     INTEGER(C_INT)                              :: periodicity      ! 0 =: aperiodic, 1 =: periodic in y, 2 =: periodic in x, 3 =: periodic everywhere
-    INTEGER(C_INT)                              :: num_states       ! number of possible discrete states
-    INTEGER(C_INT)                              :: mc_sweeps        ! number of Monte-Carlo "sweeps" to perform during generation
+    INTEGER(C_INT)                              :: numStates        ! number of possible discrete states
+    INTEGER(C_INT)                              :: mcSweeps         ! number of Monte-Carlo "sweeps" to perform during generation
     REAL(C_REAL)                                :: temperature      ! temperature of crystal during evolution (useful during Potts generation)
-    REAL(C_REAL)                                :: en_per_length    ! constant used in grain boundary energy calculations (electronVolts per ?m)
-    REAL(C_REAL),DIMENSION(1:2)                 :: grid_spacing     ! x and y spacing used in rectangular grid in Potts generator
-    REAL(C_REAL),DIMENSION(1:2)                 :: x_bounds         ! min and max x coordinate
-    REAL(C_REAL),DIMENSION(1:2)                 :: y_bounds         ! min and max y coordinate
-    INTEGER(C_INT),DIMENSION(:),ALLOCATABLE     :: grain_size_array ! histogram of number of nodes in each grain, numbered the same as enumer
-    REAL(C_REAL),DIMENSION(:,:),ALLOCATABLE     :: grain_location   ! Sample point within the grain
-    INTEGER(C_INT)                              :: max_grain_index  ! Highest integer in enumer. Put here to avoid recalculation.
-    INTEGER(C_INT)                              :: num_grains       ! Number of grains in crystal
-    INTEGER(C_INT)                              :: max_grain_size   ! number of nodes inside of biggest grain
-    REAL(C_REAL)                                :: avg_size         ! Average grain size, if it is useful
-    INTEGER(C_INT), DIMENSION(0:7)              :: grain_size_histo ! Histogram of grain sizes, binned by the proportion of map coverage
-  END TYPE lattice
+    REAL(C_REAL)                                :: enrgPerLength    ! constant used in grain boundary energy calculations (electronVolts per ?m)
+    REAL(C_REAL),DIMENSION(1:2)                 :: gridSpacing      ! x and y spacing used in rectangular grid in Potts generator
+    REAL(C_REAL),DIMENSION(1:2)                 :: xBounds          ! min and max x coordinate
+    REAL(C_REAL),DIMENSION(1:2)                 :: yBounds          ! min and max y coordinate
+    INTEGER(C_INT),DIMENSION(:),ALLOCATABLE     :: grainSizeArray   ! histogram of number of nodes in each grain, numbered the same as enumer
+    INTEGER(C_INT)                              :: maxGrainIndex    ! Highest integer in enumer. Put here to avoid recalculation.
+    INTEGER(C_INT)                              :: numGrains        ! Number of grains in crystal
+    INTEGER(C_INT)                              :: maxGrainSize     ! number of nodes inside of biggest grain
+    REAL(C_REAL)                                :: avgSize          ! Average grain size, if it is useful
+    INTEGER(C_INT), DIMENSION(0:7)              :: grainSizeHisto   ! Histogram of grain sizes, binned by the proportion of map coverage
+  END TYPE Lattice
+
+  ! Grain facet - one whole grain undivided by triangulation
+  TYPE GrainFacet
+    INTEGER(C_INT)                              :: gFIndex          ! self-referential index for convenience
+    TYPE(LatticeVertex), POINTER                :: samplePoint      ! Sample point within the grain
+    TYPE(GrainHalfEdge), POINTER                :: boundingEdge     ! one of the half-edges that bound the grain
+    INTEGER(C_INT)                              :: latticeVertexCount
+    INTEGER(C_INT)                              :: qState           ! discretized state of grain (spin state, orthogonal orientation state)
+    REAL(C_REAL)                                :: majorAxis        ! non-discretized state of grain (major axis orientation angle)
+  END TYPE GrainFacet
+
+  ! Grain half-edge - entity representing half of an actual grain boundary segment
+  TYPE GrainHalfEdge
+    INTEGER(C_INT)                              :: gEIndex          ! self-referential index for convenience
+    TYPE(GrainHalfEdge), POINTER                :: twin             ! complimentary half-edge going in the opposite direction
+    TYPE(GrainHalfEdge), POINTER                :: next             ! the next half-edge on the border of the neighboring facet
+    TYPE(GrainHalfEdge), POINTER                :: prev             ! the previous half-edge on the border of the neighboring facet
+    TYPE(GrainBoundary), POINTER                :: parent           ! the grain boundary that contains this border segment
+    TYPE(GrainFacet), POINTER                   :: neighborFacet    ! the facet bounded by this half-edge
+    TYPE(GrainVertex), POINTER                  :: originVertex     ! the origin of this half-edge
+  END TYPE GrainHalfEdge
+
+  ! Grain vertex - the boundary points of a grain
+  TYPE GrainVertex
+    INTEGER(C_INT)                              :: gVIndex          ! self-referential index for convenience
+    TYPE(GrainHalfEdge), POINTER                :: neighborHalfEdge ! one (of possibly many) of the half edges originating at this vertex
+    REAL(C_REAL),DIMENSION(1:2)                 :: location         ! x-y coordinates of vertex
+    LOGICAL(C_BOOL)                             :: isJunction       ! True if the vertex is the junction of boundaries
+  END TYPE GrainVertex
+
+  TYPE GrainBoundary
+    INTEGER(C_INT)                              :: gBIndex          ! self-referential index for convenience
+    TYPE(GrainHalfEdge), POINTER                :: startSegment     ! a half-edge on the grain boundary
+    REAL(C_REAL),DIMENSION(:,:),ALLOCATABLE     :: fittedPoints     ! original points on boundary
+    REAL(C_REAL),DIMENSION(:,:),ALLOCATABLE     :: smoothedPoints   ! smoothed out points on the boundary
+    INTEGER(C_INT)                              :: numPoints        ! number of points in boundary
+    REAL(C_REAL)                                :: a,b,c,d          ! boundary curve parameters
+    REAL(C_REAL)                                :: alpha_m,beta_m,gamma_m ! curve fitting parameters
+    REAL(C_REAL)                                :: p,q,r,s          ! point fitting parameters
+  END TYPE GrainBoundary
 
 CONTAINS
 
-  ! (Re)Initialize important counters in lattice structure
-  ! USAGE: CALL init_lattice(which_lattice)
-  SUBROUTINE init_lattice(which_lattice)
-    USE FileHandling, only: stderr
+  ! Initialize a lattice facet search sublist
+  SUBROUTINE init_lattice_facet_list(this,firstIndex)
     IMPLICIT NONE
-    TYPE(lattice),INTENT(INOUT)                 :: which_lattice
+    CLASS(LatticeFacetSItem),INTENT(INOUT),TARGET :: this
+    INTEGER(C_INT),INTENT(IN)                     :: firstIndex
 
-    IF( ALLOCATED(which_lattice%nodes)) THEN
-      IF( which_lattice%num_nodes .ne. SIZE(which_lattice%nodes) ) THEN
-        WRITE(stderr,'(A,I8)') "WARNING: Nodes already allocated: lattice reported ", which_lattice%num_nodes, " nodes"
-        WRITE(stderr,'(A,I8,A)') "   but there were ",SIZE(which_lattice%nodes)," nodes allocated."
-        WRITE(stderr,'(A,I8,A)') "   Correcting node count to ",SIZE(which_lattice%nodes),"."
-        which_lattice%num_nodes = SIZE(which_lattice%nodes)
-      END IF
-    ELSE
-      IF( which_lattice%num_nodes .ne. 0 ) THEN
-        WRITE(stderr,'(A,I8)') "WARNING: Lattice reported ", which_lattice%num_nodes, " nodes"
-        WRITE(stderr,'(A)') "   but there were 0 nodes allocated."
-        WRITE(stderr,'(A,I8,A)') "   Correcting node count to ",0,"."
-      END IF
-      which_lattice%num_nodes = 0
-    END IF
+    this%isHead = .TRUE.
+    this%vertexIndex = firstIndex
+    this%next => this
+  END SUBROUTINE init_lattice_facet_list
 
-    IF( ALLOCATED(which_lattice%edges)) THEN
-      IF( which_lattice%num_edges .ne. SIZE(which_lattice%edges) ) THEN
-        WRITE(stderr,'(A,I8)') "WARNING: Edges already allocated: lattice reported ", which_lattice%num_edges, " edges"
-        WRITE(stderr,'(A,I8,A)') "   but there were ",SIZE(which_lattice%edges)," edges allocated."
-        WRITE(stderr,'(A,I8,A)') "   Correcting edge count to ",SIZE(which_lattice%edges),"."
-        which_lattice%num_edges = SIZE(which_lattice%edges)
-      END IF
-    ELSE
-      IF( which_lattice%num_edges .ne. 0 ) THEN
-        WRITE(stderr,'(A,I8)') "WARNING: Lattice reported ", which_lattice%num_edges, " edges"
-        WRITE(stderr,'(A)') "   but there were 0 edges allocated."
-        WRITE(stderr,'(A,I8,A)') "   Correcting edge count to ",0,"."
-      END IF
-      which_lattice%num_edges = 0
-    END IF
-
-    IF( ALLOCATED(which_lattice%cells)) THEN
-      IF( which_lattice%num_cells .ne. SIZE(which_lattice%cells) ) THEN
-        WRITE(stderr,'(A,I8)') "WARNING: Cells already allocated: lattice reported ", which_lattice%num_cells, " cells"
-        WRITE(stderr,'(A,I8,A)') "   but there were ",SIZE(which_lattice%cells)," cells allocated."
-        WRITE(stderr,'(A,I8,A)') "   Correcting cell count to ",SIZE(which_lattice%cells),"."
-        which_lattice%num_cells = SIZE(which_lattice%cells)
-      END IF
-    ELSE
-      IF( which_lattice%num_cells .ne. 0 ) THEN
-        WRITE(stderr,'(A,I8)') "WARNING: Lattice reported ", which_lattice%num_cells, " cells"
-        WRITE(stderr,'(A)') "   but there were 0 cells allocated."
-        WRITE(stderr,'(A,I8,A)') "   Correcting cell count to ",0,"."
-      END IF
-      which_lattice%num_cells = 0
-    END IF
-    which_lattice%num_grains = 0
-  END SUBROUTINE init_lattice
-
-  ! Properly deallocate a lattice_node
-  ! USAGE: CALL deallocate_lattice_node(which_node)
-  SUBROUTINE deallocate_lattice_node(which_node)
+  ! push a lattice facet onto the search sublist
+  SUBROUTINE push_lattice_facet_list(this,secondIndex,facetIndex)
     IMPLICIT NONE
-    TYPE(lattice_node),INTENT(INOUT)            :: which_node
+    CLASS(LatticeFacetSItem),INTENT(INOUT)        :: this
+    INTEGER(C_INT),INTENT(IN)                     :: secondIndex,facetIndex
+    TYPE(LatticeFacetSItem),POINTER               :: curr
 
-    !IF( ALLOCATED(which_node%neigh_edges) ) DEALLOCATE(which_node%neigh_edges)
-    !IF( ALLOCATED(which_node%neigh_cells) ) DEALLOCATE(which_node%neigh_cells)
-  END SUBROUTINE deallocate_lattice_node
+    ALLOCATE(curr)
+    curr%isHead = .FALSE.
+    curr%vertexIndex = secondIndex
+    curr%facetIndex = facetIndex
+    curr%next => this%next
+    this%next => curr
+  END SUBROUTINE push_lattice_facet_list
 
-  ! Properly deallocate a lattice
-  ! USAGE: CALL deallocate_lattice(which_lattice)
-  SUBROUTINE deallocate_lattice(which_lattice)
-    USE FileHandling, only: stderr
+  ! mosly useless, but here for the sake of completeness
+  FUNCTION pop_lattice_facet_list(this) RESULT(facetIndex)
     IMPLICIT NONE
-    TYPE(lattice),INTENT(INOUT)                 :: which_lattice
-    INTEGER                                     :: i
+    CLASS(LatticeFacetSItem)                      :: this
+    INTEGER                                       :: facetIndex
+    TYPE(LatticeFacetSItem),POINTER               :: prev,curr,next
 
-    IF( ALLOCATED(which_lattice%nodes)) THEN
-      IF( which_lattice%num_nodes .ne. SIZE(which_lattice%nodes) ) THEN
-        WRITE(stderr,'(A,I8)') "WARNING: During node deallocation, lattice reported ", which_lattice%num_nodes, " nodes"
-        WRITE(stderr,'(A,I8,A)') "   but there were ",SIZE(which_lattice%nodes)," nodes to deallocate."
-      END IF
-      DO i=LBOUND(which_lattice%nodes,1),UBOUND(which_lattice%nodes,1)
-        CALL deallocate_lattice_node(which_lattice%nodes(i))
+    curr => this%next
+    next => curr%next
+    IF (this%isHead) THEN
+      facetIndex = curr%facetIndex
+      this%next => next
+      curr%next => curr
+      DEALLOCATE(curr)
+      RETURN
+    ELSE
+      DO
+        prev => curr
+        curr => prev%next
+        next => prev%next%next
+        IF (prev%isHead) THEN
+          facetIndex = curr%facetIndex
+          prev%next => next
+          curr%next => curr
+          DEALLOCATE(curr)
+          RETURN
+        END IF
       END DO
-      DEALLOCATE(which_lattice%nodes)
-    ELSE IF( which_lattice%num_nodes .ne. 0 ) THEN
-      WRITE(stderr,'(A,I8)') "WARNING: During node deallocation, lattice reported ", which_lattice%num_nodes, " nodes"
-      WRITE(stderr,'(A)') "   but there were 0 nodes to deallocate."
     END IF
+  END FUNCTION pop_lattice_facet_list
 
-    IF( ALLOCATED(which_lattice%edges)) THEN
-      IF( which_lattice%num_edges .ne. SIZE(which_lattice%edges) ) THEN
-        WRITE(stderr,'(A,I8)') "WARNING: During edge deallocation, lattice reported ", which_lattice%num_edges, " edges"
-        WRITE(stderr,'(A,I8,A)') "   but there were ",SIZE(which_lattice%edges)," edges to deallocate."
-      END IF
-      DEALLOCATE(which_lattice%edges)
-    ELSE IF( which_lattice%num_edges .ne. 0 ) THEN
-      WRITE(stderr,'(A,I8)') "WARNING: During edge deallocation, lattice reported ", which_lattice%num_edges, " edges"
-      WRITE(stderr,'(A)') "   but there were 0 edges to deallocate."
-    END IF
+  ! delete and deallocate a facet list the proper way
+  SUBROUTINE delete_lattice_facet_list(this)
+    IMPLICIT NONE
+    CLASS(LatticeFacetSItem),INTENT(IN),TARGET    :: this
+    TYPE(LatticeFacetSItem),POINTER               :: prev,curr,next
 
-    IF( ALLOCATED(which_lattice%cells)) THEN
-      IF( which_lattice%num_cells .ne. SIZE(which_lattice%cells) ) THEN
-        WRITE(stderr,'(A,I8)') "WARNING: During cell deallocation, lattice reported ", which_lattice%num_cells, " cells"
-        WRITE(stderr,'(A,I8,A)') "   but there were ",SIZE(which_lattice%cells)," cells to deallocate."
-      END IF
-      DEALLOCATE(which_lattice%cells)
-    ELSE IF( which_lattice%num_cells .ne. 0 ) THEN
-      WRITE(stderr,'(A,I8)') "WARNING: During cell deallocation, lattice reported ", which_lattice%num_cells, " cells"
-      WRITE(stderr,'(A)') "   but there were 0 cells to deallocate."
+    prev => this
+    curr => this%next
+    next => this%next%next
+    IF (.NOT. this%isHead) THEN
+      DO
+        prev => curr
+        curr => prev%next
+        next => prev%next%next
+        IF (prev%isHead) EXIT
+      END DO
     END IF
-    IF( ALLOCATED(which_lattice%grain_size_array) ) DEALLOCATE(which_lattice%grain_size_array)
-    IF( ALLOCATED(which_lattice%grain_location) ) DEALLOCATE(which_lattice%grain_location)
-  END SUBROUTINE deallocate_lattice
+    DO
+      IF (curr%isHead) EXIT
+      curr%next => curr
+      DEALLOCATE(curr)
+      prev%next => next
+      curr => prev%next
+      next => prev%next%next
+    END DO
+  END SUBROUTINE delete_lattice_facet_list
+
+  ! searc hth list for a facet to the left of a certain edge
+  FUNCTION search_lattice_facet_list(this,secondIndex) RESULT(facetIndex)
+    USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: stderr => ERROR_UNIT
+    IMPLICIT NONE
+    CLASS(LatticeFacetSItem)                      :: this
+    INTEGER                                       :: facetIndex, firstIndex, secondIndex
+    TYPE(LatticeFacetSItem),POINTER               :: prev,curr
+
+    curr => this%next
+    IF (.NOT. this%isHead) THEN
+      DO
+        prev => curr
+        curr => prev%next
+        IF (prev%isHead) THEN
+          firstIndex = prev%vertexIndex
+          EXIT
+        END IF
+      END DO
+    ELSE
+      firstIndex = this%vertexIndex
+    END IF
+    DO
+      IF (curr%isHead) THEN
+        WRITE(stderr,"(A,I8,A,I8,A)") "WARNING: Search for a facet with vertices ", firstIndex, " , ", secondIndex, " in", &
+             " in counter-clockwise order failed. Assuming line segment is part of outer bounds."
+        facetIndex = 0
+        RETURN
+      END IF
+      IF (curr%vertexIndex == secondIndex) THEN
+        facetIndex = curr%facetIndex
+        RETURN
+      END IF
+      curr => curr%next
+    END DO
+  END FUNCTION search_lattice_facet_list
 
 END MODULE basictypes

@@ -22,7 +22,7 @@ ANIDIR = anim
 PROGDIR = progs
 
 # Tests - name your test executables here
-TESTS = $(addprefix $(BINDIR)/,read_poly_to_vtk)
+TESTS = $(addprefix $(BINDIR)/,read_poly_to_vtk read_poly_to_triangulated_vtk)
 # Programs - name your final executables here
 PROGRAMS = $(addprefix $(BINDIR)/,read_poly_to_vtk)
 # All directive. What make will make by default
@@ -32,6 +32,8 @@ all:$(TESTS) $(PROGRAMS)
 # create the executables.
 
 $(BINDIR)/read_poly_to_vtk: $(addprefix $(OBJDIR)/,read_poly_to_vtk.o triangle_output.o triangle_c_wrap.o triangle_input.o mFileHandling.o math_tools.o) triangle_lib/triangle.o
+
+$(BINDIR)/read_poly_to_triangulated_vtk: $(addprefix $(OBJDIR)/, read_poly_to_triangulated_vtk.o triangle_output.o triangle_c_wrap.o triangle_input.o mFileHandling.o math_tools.o) triangle_lib/triangle.o
 
 #Executable Object dependencies. List object files that depend on modules from other object files here
 
@@ -47,7 +49,9 @@ $(OBJDIR)/triangle_input.o: $(addprefix $(OBJDIR)/,triangle_c_wrap.o mFileHandli
 
 $(OBJDIR)/triangle_output.o: $(addprefix $(OBJDIR)/,triangle_c_wrap.o mFileHandling.o)
 
-$(OBJDIR)/qmap_input.o: $(addprefix $(OBJDIR)/,basictypes.o mFileHandling.o)
+$(OBJDIR)/qmap_input.o: $(addprefix $(OBJDIR)/,basictypes.o mFileHandling.o triangle_c_wrap.o triangle_input.o)
+
+$(OBJDIR)/trans_lattice_triangle.o: $(addprefix $(OBJDIR)/,basictypes.o triangle_c_wrap.o)
 
 # target for Triangle lib
 triangle_lib/triangle.o : triangle_lib/triangle.c triangle_lib/triangle.h
