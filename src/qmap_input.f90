@@ -15,23 +15,45 @@ CONTAINS
     USE mFileHandling, only: FILE, stderr
     USE basictypes, only: Lattice
     USE triangle_c_wrap, only: triangulateio,f_triangulateio,ctriangulate,copytriangles_c_to_f,init_outputs,deallocate_triangulateio
+    USE triangle_c_wrap, only: C_REAL,allocate_points_ftoc,allocate_segments,allocate_holes,allocate_regions
     USE triangle_input, only: read_shapes
-    USE,INTRINSIC:: ISO_C_BINDING, only:C_NULL_CHAR,C_CHAR
+    USE triangle_output, only: output_triangle_to_vtk
+    USE,INTRINSIC:: ISO_C_BINDING, only:C_NULL_CHAR,C_CHAR,C_INT
     IMPLICIT NONE
 
     CHARACTER(LEN=256),INTENT(IN)                     :: filename
     CHARACTER(LEN=256),INTENT(IN)                     :: outfileroot
+    CHARACTER(LEN=256)                                :: infileroot
     TYPE(Lattice)                                     :: latticeData
     TYPE(triangulateio)                               :: c_shape,c_shape_out,c_shape_vorout
     TYPE(f_triangulateio)                             :: f_shape,f_shape_out
     CHARACTER(len=256)                                :: polyfilename
-    INTEGER,DIMENSION(:),ALLOCATABLE                  :: Q
     TYPE(FILE)                                        :: inputFile
     INTEGER                                           :: ios
     CHARACTER(LEN=8)                                  :: mapType
     CHARACTER(kind=C_CHAR,len=256)                    :: flags
-    INTEGER                                           :: num_cols,num_rows,col_i,row_j
-    LOGICAL                                           :: qstate_present
+    INTEGER                                           :: num_x,num_y
+    INTEGER                                           :: i,j,k,l
+    REAL(C_REAL)                                      :: remainder
+    REAL(C_REAL),DIMENSION(:),ALLOCATABLE             :: xPosArray, yPosArray
+
+    CHARACTER(LEN=1),PARAMETER                        :: dirSep = '/'
+    INTEGER                                           :: ls
+
+    ls = INDEX(filename,dirSep,.TRUE.)
+    infileroot = filename(1:ls)
+
+    f_shape%numberofpoints             = 0
+    f_shape%numberofpointattributes    = 0
+    f_shape%numberofholes              = 0
+    f_shape%numberofregions            = 0
+    f_shape%numberofsegments           = 0
+    f_shape%numberoftriangles          = 0
+    f_shape%numberofcorners            = 0
+    f_shape%numberoftriangleattributes = 0
+    f_shape%numberofedges              = 0
+    CALL allocate_holes(f_shape,c_shape)
+    CALL allocate_regions(f_shape,c_shape)
 
     CALL inputFile%openReadOnly(filename)
     CALL skip_comments_input(inputFile)
@@ -56,33 +78,288 @@ CONTAINS
     ! 0 =: aperiodic, 1 =: periodic in y, 2 =: periodic in x, 3 =: periodic everywhere
     READ(inputFile%getFunit(),*,iostat=ios,err=900) latticeData%periodicity
     CALL skip_comments_input(inputFile)
+
+
     ! Where should the point data come from?
     READ(inputFile%getFunit(),*,iostat=ios,err=800) mapType
+    ! Point data is in a seperate pslg format file
     IF (mapType == "datafile") THEN
       CALL skip_comments_input(inputFile)
-      READ(inputFile%getFunit(),*,iostat=ios,err=100) polyfilename
+      READ(inputFile%getFunit(),'(A)',iostat=ios,err=100) polyfilename
+      polyfilename = TRIM(infileroot)//TRIM(polyfilename)
       ! Read in point and shape data
       CALL read_shapes(polyfilename,c_shape,f_shape)
-      CALL output_triangle_to_vtk(f_shape_out,TRIM(outfileroot)//"init.vtk")
-      flags = TRIM("prqcO")//C_NULL_CHAR
-      CALL init_outputs(c_shape_out)
-      CALL init_outputs(c_shape_vorout)
-      CALL ctriangulate(flags,c_shape,c_shape_out,c_shape_vorout)
-      CALL copytriangles_c_to_f(c_shape_out,f_shape_out)
-      CALL output_triangle_to_vtk(f_shape_out,TRIM(outfileroot)//"first.vtk")
-      CALL deallocate_triangulateio(f_shape, input=.TRUE., neigh=.FALSE., voroni=.FALSE.)
-      CALL deallocate_triangulateio(f_shape_out, input=.FALSE., neigh=.FALSE., voroni=.FALSE.)
+
+    ! Generate point data, no Q-state, points at random positions
+    ! for use with the positional evolver and the orientation based boundary finder
     ELSE IF (mapType == "random") THEN
+      CALL init_random_seed()
+      CALL skip_comments_input(inputFile)
+      READ(inputFile%getFunit(),*,iostat=ios,err=150) f_shape%numberofpoints
+      f_shape%numberofpoints = f_shape%numberofpoints + 4
+      f_shape%numberofpointattributes    = 0
+      CALL allocate_points_ftoc(f_shape,c_shape)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-7) = latticeData%xBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-6) = latticeData%yBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-5) = latticeData%xBounds(2)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-4) = latticeData%yBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-3) = latticeData%xBounds(2)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-2) = latticeData%yBounds(2)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-1) = latticeData%xBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist))   = latticeData%yBounds(2)
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-3) = 1
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-2) = 1
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-1) = 1
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist))   = 1
+
+      f_shape%numberofsegments = 4
+      CALL allocate_segments(f_shape,c_shape)
+      f_shape%segmentlist(1) = SIZE(f_shape%pointmarkerlist)-3
+      f_shape%segmentlist(2) = SIZE(f_shape%pointmarkerlist)-2
+      f_shape%segmentlist(3) = SIZE(f_shape%pointmarkerlist)-2
+      f_shape%segmentlist(4) = SIZE(f_shape%pointmarkerlist)-1
+      f_shape%segmentlist(5) = SIZE(f_shape%pointmarkerlist)-1
+      f_shape%segmentlist(6) = SIZE(f_shape%pointmarkerlist)
+      f_shape%segmentlist(7) = SIZE(f_shape%pointmarkerlist)
+      f_shape%segmentlist(8) = SIZE(f_shape%pointmarkerlist)-3
+      f_shape%segmentmarkerlist(1) = 1
+      f_shape%segmentmarkerlist(2) = 1
+      f_shape%segmentmarkerlist(3) = 1
+      f_shape%segmentmarkerlist(4) = 1
+
+      DO i=1,f_shape%numberofpoints - 4
+        CALL RANDOM_NUMBER(remainder)
+        f_shape%pointlist(2*i-1) = remainder*(latticeData%xBounds(2)-latticeData%xBounds(1))
+        f_shape%pointlist(2*i-1) = f_shape%pointlist(2*i-1) + latticeData%xBounds(1)
+        CALL RANDOM_NUMBER(remainder)
+        f_shape%pointlist(2*i)   = remainder*(latticeData%yBounds(2)-latticeData%yBounds(1))
+        f_shape%pointlist(2*i)   = f_shape%pointlist(2*i) + latticeData%yBounds(1)
+        f_shape%pointmarkerlist(i) = 0
+      END DO
+
+    ! Generate point data, random Q-state, points arranged in a rectilinear grid
+    ! for use with the Q-state evolver and the Q-state based boundary finder
     ELSE IF (mapType == "rect") THEN
+      CALL init_random_seed()
+      num_x = INT((latticeData%xBounds(2) - latticeData%xBounds(1))/latticeData%gridSpacing(1))
+      remainder = (latticeData%xBounds(2) - latticeData%xBounds(1)) - REAL(num_x)*latticeData%gridSpacing(1)
+      IF (remainder < latticeData%gridSpacing(1)/2.0) THEN
+        ALLOCATE(xPosArray(1:num_x+1),STAT=ios)
+        IF ( ios /= 0) THEN
+          WRITE(stderr,'(A,i16, A)') "ERROR : Allocation request denied. Array needed ",num_x+1," elements."
+          STOP 1
+        END IF
+        xPosArray(1:num_x) = (/(latticeData%xBounds(1)+latticeData%gridSpacing(1)*REAL(i),i = 0,(num_x-1),1)/)
+        xPosArray(num_x+1) = latticeData%xBounds(2)
+      ELSE
+        ALLOCATE(xPosArray(1:num_x+2),STAT=ios)
+        IF ( ios /= 0) THEN
+          WRITE(stderr,'(A,i16, A)') "ERROR : Allocation request denied. Array needed ",num_x+2," elements."
+          STOP 1
+        END IF
+        xPosArray(1:num_x+1) = (/(latticeData%xBounds(1)+latticeData%gridSpacing(1)*REAL(i),i = 0,num_x,1)/)
+        xPosArray(num_x+2) = latticeData%xBounds(2)
+      END IF
+      num_y = INT((latticeData%yBounds(2) - latticeData%yBounds(1))/latticeData%gridSpacing(2))
+      remainder = (latticeData%yBounds(2) - latticeData%yBounds(1)) - REAL(num_y)*latticeData%gridSpacing(2)
+      IF (remainder < latticeData%gridSpacing(2)/2.0) THEN
+        ALLOCATE(yPosArray(1:num_y+1),STAT=ios)
+        IF ( ios /= 0) THEN
+          WRITE(stderr,'(A,i16, A)') "ERROR : Allocation request denied. Array needed ",num_y+1," elements."
+          STOP 1
+        END IF
+        yPosArray(1:num_y) = (/(latticeData%yBounds(1)+latticeData%gridSpacing(2)*REAL(i),i = 0,(num_y-1),1)/)
+        yPosArray(num_y+1) = latticeData%yBounds(2)
+      ELSE
+        ALLOCATE(yPosArray(1:num_y+2),STAT=ios)
+        IF ( ios /= 0) THEN
+          WRITE(stderr,'(A,i16, A)') "ERROR : Allocation request denied. Array needed ",num_y+2," elements."
+          STOP 1
+        END IF
+        yPosArray(1:num_y+1) = (/(latticeData%yBounds(1)+latticeData%gridSpacing(2)*REAL(i),i = 0,num_y,1)/)
+        yPosArray(num_y+2) = latticeData%yBounds(2)
+      END IF
+      f_shape%numberofpoints             = SIZE(xPosArray)*SIZE(yPosArray) + 4
+      f_shape%numberofpointattributes    = 1
+      CALL allocate_points_ftoc(f_shape,c_shape)
+      DO j = 1, SIZE(yPosArray)
+        DO i = 1,SIZE(xPosArray)
+          f_shape%pointlist(2*(j-1)*SIZE(xPosArray)+2*i-1) = xPosArray(i)
+          f_shape%pointlist(2*(j-1)*SIZE(xPosArray)+2*i) = yPosArray(j)
+          CALL RANDOM_NUMBER(remainder)
+          remainder = REAL(latticeData%numStates,C_REAL)*remainder
+          f_shape%pointattributelist((j-1)*SIZE(xPosArray)+i) = INT(remainder,C_INT) + 1
+          f_shape%pointmarkerlist((j-1)*SIZE(xPosArray)+i) = 0
+        END DO
+      END DO
+      f_shape%pointlist(SIZE(f_shape%pointlist)-7) = latticeData%xBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-6) = latticeData%yBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-5) = latticeData%xBounds(2)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-4) = latticeData%yBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-3) = latticeData%xBounds(2)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-2) = latticeData%yBounds(2)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-1) = latticeData%xBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist))   = latticeData%yBounds(2)
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-3) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-2) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-1) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist))   = 0
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-3) = 1
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-2) = 1
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-1) = 1
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist))   = 1
+
+      f_shape%numberofsegments = 4
+      CALL allocate_segments(f_shape,c_shape)
+      f_shape%segmentlist(1) = SIZE(f_shape%pointmarkerlist)-3
+      f_shape%segmentlist(2) = SIZE(f_shape%pointmarkerlist)-2
+      f_shape%segmentlist(3) = SIZE(f_shape%pointmarkerlist)-2
+      f_shape%segmentlist(4) = SIZE(f_shape%pointmarkerlist)-1
+      f_shape%segmentlist(5) = SIZE(f_shape%pointmarkerlist)-1
+      f_shape%segmentlist(6) = SIZE(f_shape%pointmarkerlist)
+      f_shape%segmentlist(7) = SIZE(f_shape%pointmarkerlist)
+      f_shape%segmentlist(8) = SIZE(f_shape%pointmarkerlist)-3
+      f_shape%segmentmarkerlist(1) = 1
+      f_shape%segmentmarkerlist(2) = 1
+      f_shape%segmentmarkerlist(3) = 1
+      f_shape%segmentmarkerlist(4) = 1
+
+      DEALLOCATE(xPosArray)
+      DEALLOCATE(yPosArray)
+
+    ! Generate point data, random Q-state, points arranged in a hexagonal grid
+    ! for use with the Q-state evolver and the Q-state based boundary finder
     ELSE IF (mapType == "hex") THEN
+      CALL init_random_seed()
+      num_x = INT((latticeData%xBounds(2) - latticeData%xBounds(1))/latticeData%gridSpacing(1))
+      remainder = (latticeData%xBounds(2) - latticeData%xBounds(1)) - REAL(num_x)*latticeData%gridSpacing(1)
+      IF (remainder < latticeData%gridSpacing(1)/2.0) THEN
+        ALLOCATE(xPosArray(1:num_x+1),STAT=ios)
+        IF ( ios /= 0) THEN
+          WRITE(stderr,'(A,i16, A)') "ERROR : Allocation request denied. Array needed ",num_x+1," elements."
+          STOP 1
+        END IF
+        xPosArray(1:num_x) = (/(latticeData%xBounds(1)+latticeData%gridSpacing(1)*REAL(i),i = 0,(num_x-1),1)/)
+        xPosArray(num_x+1) = latticeData%xBounds(2)
+      ELSE
+        ALLOCATE(xPosArray(1:num_x+2),STAT=ios)
+        IF ( ios /= 0) THEN
+          WRITE(stderr,'(A,i16, A)') "ERROR : Allocation request denied. Array needed ",num_x+2," elements."
+          STOP 1
+        END IF
+        xPosArray(1:num_x+1) = (/(latticeData%xBounds(1)+latticeData%gridSpacing(1)*REAL(i),i = 0,num_x,1)/)
+        xPosArray(num_x+2) = latticeData%xBounds(2)
+      END IF
+      num_y = INT((latticeData%yBounds(2) - latticeData%yBounds(1))/latticeData%gridSpacing(2))
+      remainder = (latticeData%yBounds(2) - latticeData%yBounds(1)) - REAL(num_y)*latticeData%gridSpacing(2)
+      IF (remainder < latticeData%gridSpacing(2)/2.0) THEN
+        ALLOCATE(yPosArray(1:num_y+1),STAT=ios)
+        IF ( ios /= 0) THEN
+          WRITE(stderr,'(A,i16, A)') "ERROR : Allocation request denied. Array needed ",num_y+1," elements."
+          STOP 1
+        END IF
+        yPosArray(1:num_y) = (/(latticeData%yBounds(1)+latticeData%gridSpacing(2)*REAL(i),i = 0,(num_y-1),1)/)
+        yPosArray(num_y+1) = latticeData%yBounds(2)
+      ELSE
+        ALLOCATE(yPosArray(1:num_y+2),STAT=ios)
+        IF ( ios /= 0) THEN
+          WRITE(stderr,'(A,i16, A)') "ERROR : Allocation request denied. Array needed ",num_y+2," elements."
+          STOP 1
+        END IF
+        yPosArray(1:num_y+1) = (/(latticeData%yBounds(1)+latticeData%gridSpacing(2)*REAL(i),i = 0,num_y,1)/)
+        yPosArray(num_y+2) = latticeData%yBounds(2)
+      END IF
+      f_shape%numberofpointattributes    = 1
+      IF(MOD(SIZE(yPosArray),2) == 0 ) THEN
+        f_shape%numberofpoints = (SIZE(xPosArray)-1)*SIZE(yPosArray) + SIZE(yPosArray)/2 + 4
+      ELSE
+        f_shape%numberofpoints = (SIZE(xPosArray)-1)*SIZE(yPosArray) + SIZE(yPosArray)/2 + 5
+      END IF
+      CALL allocate_points_ftoc(f_shape,c_shape)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-7) = latticeData%xBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-6) = latticeData%yBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-5) = latticeData%xBounds(2)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-4) = latticeData%yBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-3) = latticeData%xBounds(2)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-2) = latticeData%yBounds(2)
+      f_shape%pointlist(SIZE(f_shape%pointlist)-1) = latticeData%xBounds(1)
+      f_shape%pointlist(SIZE(f_shape%pointlist))   = latticeData%yBounds(2)
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-3) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-2) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-1) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist))   = 0
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-3) = 1
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-2) = 1
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-1) = 1
+      f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist))   = 1
+
+      f_shape%numberofsegments = 4
+      CALL allocate_segments(f_shape,c_shape)
+      f_shape%segmentlist(1) = SIZE(f_shape%pointmarkerlist)-3
+      f_shape%segmentlist(2) = SIZE(f_shape%pointmarkerlist)-2
+      f_shape%segmentlist(3) = SIZE(f_shape%pointmarkerlist)-2
+      f_shape%segmentlist(4) = SIZE(f_shape%pointmarkerlist)-1
+      f_shape%segmentlist(5) = SIZE(f_shape%pointmarkerlist)-1
+      f_shape%segmentlist(6) = SIZE(f_shape%pointmarkerlist)
+      f_shape%segmentlist(7) = SIZE(f_shape%pointmarkerlist)
+      f_shape%segmentlist(8) = SIZE(f_shape%pointmarkerlist)-3
+      f_shape%segmentmarkerlist(1) = 1
+      f_shape%segmentmarkerlist(2) = 1
+      f_shape%segmentmarkerlist(3) = 1
+      f_shape%segmentmarkerlist(4) = 1
+
+      k = 0
+      l = 0
+      DO j = 1, SIZE(yPosArray)
+        DO i = 1,SIZE(xPosArray)
+          IF(MOD(j,2) == 0) THEN
+            IF(i == SIZE(xPosArray)) CYCLE
+            k = k+1
+            f_shape%pointlist(k) = xPosArray(i) + latticeData%gridSpacing(1)/2.0_C_REAL
+            k = k+1
+            f_shape%pointlist(k) = yPosArray(j)
+            l = l+1
+            CALL RANDOM_NUMBER(remainder)
+            remainder = REAL(latticeData%numStates,C_REAL)*remainder
+            f_shape%pointattributelist(l) = INT(remainder,C_INT) + 1
+            f_shape%pointmarkerlist(l) = 0
+          ELSE
+             k = k+1
+             f_shape%pointlist(k) = xPosArray(i)
+             k = k+1
+             f_shape%pointlist(k) = yPosArray(j)
+             l = l+1
+             CALL RANDOM_NUMBER(remainder)
+             remainder = REAL(latticeData%numStates,C_REAL)*remainder
+             f_shape%pointattributelist(l) = INT(remainder,C_INT) + 1
+             f_shape%pointmarkerlist(l) = 0
+          END IF
+        END DO
+      END DO
+
+      DEALLOCATE(xPosArray)
+      DEALLOCATE(yPosArray)
+
+    ! Fail!!!
     ELSE
       WRITE(stderr,'(A,A,A)') "ERROR: Misread map type from file ",TRIM(filename),"."
       STOP 1
     END IF
+
+
+    CALL output_triangle_to_vtk(f_shape,TRIM(outfileroot)//"_init.vtk")
+    flags = TRIM("pqcO")//C_NULL_CHAR
+    CALL init_outputs(c_shape_out)
+    CALL init_outputs(c_shape_vorout)
+    CALL ctriangulate(flags,c_shape,c_shape_out,c_shape_vorout)
+    CALL copytriangles_c_to_f(c_shape_out,f_shape_out)
+    CALL output_triangle_to_vtk(f_shape_out,TRIM(outfileroot)//"_first.vtk")
+    CALL deallocate_triangulateio(f_shape, input=.TRUE., neigh=.FALSE., voroni=.FALSE.)
+    CALL deallocate_triangulateio(f_shape_out, input=.FALSE., neigh=.FALSE., voroni=.FALSE.)
     RETURN
 100 WRITE(stderr,'(A,A,A)') "ERROR: Misread point data file path name  in ",TRIM(filename),"."
     STOP 1
-150 WRITE(stderr,'(A,A,A)') "ERROR: Misread number of nodes from file ",TRIM(filename),"."
+150 WRITE(stderr,'(A,A,A)') "ERROR: Misread number of points from file ",TRIM(filename),"."
     STOP 1
 200 WRITE(stderr,'(A,A,A)') "ERROR: Misread x,y-bounds from file ",TRIM(filename),"."
     STOP 1
@@ -116,4 +393,19 @@ CONTAINS
     BACKSPACE(inputFile%getFunit())
 100 CONTINUE
   END SUBROUTINE skip_comments_input
+
+  SUBROUTINE init_random_seed
+    INTEGER                             :: i, n, clock
+    INTEGER, DIMENSION(:), ALLOCATABLE  :: seed
+
+    CALL RANDOM_SEED(size = n)
+    ALLOCATE(seed(n))
+
+    CALL SYSTEM_CLOCK(COUNT=clock)
+
+    seed = clock + 37 * (/ (i - 1, i = 1, n) /)
+    CALL RANDOM_SEED(PUT = seed)
+
+    DEALLOCATE(seed)
+  END SUBROUTINE
 END MODULE qmap_input

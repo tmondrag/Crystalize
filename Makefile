@@ -22,20 +22,24 @@ ANIDIR = anim
 PROGDIR = progs
 
 # Tests - name your test executables here
-TESTS = $(addprefix $(BINDIR)/,read_poly_to_vtk read_poly_to_triangulated_vtk)
+TESTS = $(addprefix $(BINDIR)/,read_poly_to_vtk read_poly_to_triangulated_vtk crystalize)
 # Programs - name your final executables here
-PROGRAMS = $(addprefix $(BINDIR)/,read_poly_to_vtk)
+PROGRAMS = $(addprefix $(BINDIR)/,read_poly_to_vtk crystalize)
 # All directive. What make will make by default
 all:$(TESTS) $(PROGRAMS)
 
 # Linker dependencies. List the object files that need to be linked to
 # create the executables.
 
+$(BINDIR)/crystalize: $(addprefix $(OBJDIR)/,crystalize.o qmap_input.o triangle_output.o basictypes.o mFileHandling.o triangle_c_wrap.o triangle_input.o) triangle_lib/triangle.o
+
 $(BINDIR)/read_poly_to_vtk: $(addprefix $(OBJDIR)/,read_poly_to_vtk.o triangle_output.o triangle_c_wrap.o triangle_input.o mFileHandling.o math_tools.o) triangle_lib/triangle.o
 
 $(BINDIR)/read_poly_to_triangulated_vtk: $(addprefix $(OBJDIR)/, read_poly_to_triangulated_vtk.o triangle_output.o triangle_c_wrap.o triangle_input.o mFileHandling.o math_tools.o) triangle_lib/triangle.o
 
 #Executable Object dependencies. List object files that depend on modules from other object files here
+
+$(OBJDIR)/crystalize.o: $(addprefix $(OBJDIR)/,basictypes.o qmap_input.o)
 
 $(OBJDIR)/read_poly_to_vtk.o: $(addprefix $(OBJDIR)/,triangle_output.o triangle_c_wrap.o triangle_input.o mFileHandling.o)
 
@@ -49,7 +53,7 @@ $(OBJDIR)/triangle_input.o: $(addprefix $(OBJDIR)/,triangle_c_wrap.o mFileHandli
 
 $(OBJDIR)/triangle_output.o: $(addprefix $(OBJDIR)/,triangle_c_wrap.o mFileHandling.o)
 
-$(OBJDIR)/qmap_input.o: $(addprefix $(OBJDIR)/,basictypes.o mFileHandling.o triangle_c_wrap.o triangle_input.o)
+$(OBJDIR)/qmap_input.o: $(addprefix $(OBJDIR)/,basictypes.o mFileHandling.o triangle_c_wrap.o triangle_input.o triangle_output.o)
 
 $(OBJDIR)/trans_lattice_triangle.o: $(addprefix $(OBJDIR)/,basictypes.o triangle_c_wrap.o)
 

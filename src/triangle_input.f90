@@ -303,6 +303,8 @@ CONTAINS
     ! check_index is unused but it should match vert_index. Do a sanity check if you wish.
     IF(has_bound_flag) THEN
       READ(buffer,*,ERR=100) f_shape%segmentmarkerlist(seg_index)
+    ELSE
+      f_shape%segmentmarkerlist(seg_index) = 0
     END IF
     RETURN
 100 WRITE(stderr,'(A)') "ERROR: segment information misread."
