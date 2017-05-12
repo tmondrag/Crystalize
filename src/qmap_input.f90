@@ -17,7 +17,7 @@ CONTAINS
     USE triangle_c_wrap, only: triangulateio,f_triangulateio,ctriangulate,copytriangles_c_to_f,init_outputs,deallocate_triangulateio
     USE triangle_c_wrap, only: C_REAL,allocate_points_ftoc,allocate_segments,allocate_holes,allocate_regions
     USE triangle_input, only: read_shapes
-    USE triangle_output, only: output_triangle_to_vtk
+    USE triangle_output, only: output_triangle_to_vtk, output_triangle_to_poly
     USE,INTRINSIC:: ISO_C_BINDING, only:C_NULL_CHAR,C_CHAR,C_INT
     IMPLICIT NONE
 
@@ -346,14 +346,20 @@ CONTAINS
       STOP 1
     END IF
 
-
+    ! output the bare naked points and outer bounds to vtk for visualization/verification
     CALL output_triangle_to_vtk(f_shape,TRIM(outfileroot)//"_init.vtk")
+    IF (mapType /= "datafile") THEN
+      ! output the bare naked points and outer bounds to PSLG for later runs
+      CALL output_triangle_to_poly(f_shape,TRIM(outfileroot)//"_init")
+    END IF
     flags = TRIM("pqcO")//C_NULL_CHAR
     CALL init_outputs(c_shape_out)
     CALL init_outputs(c_shape_vorout)
+    ! triangulate initial points
     CALL ctriangulate(flags,c_shape,c_shape_out,c_shape_vorout)
     CALL copytriangles_c_to_f(c_shape_out,f_shape_out)
-    CALL output_triangle_to_vtk(f_shape_out,TRIM(outfileroot)//"_first.vtk")
+    ! output the first triangulation to vtk for visualization/verification
+    CALL output_triangle_to_vtk(f_shape_out,TRIM(outfileroot)//"_000000.vtk")
     CALL deallocate_triangulateio(f_shape, input=.TRUE., neigh=.FALSE., voroni=.FALSE.)
     CALL deallocate_triangulateio(f_shape_out, input=.FALSE., neigh=.FALSE., voroni=.FALSE.)
     RETURN

@@ -1,0 +1,18 @@
+# A test of the freeform PLSG input based input for crystalize inputs
+# First, describe the bulk properties of the material and simulation
+# energy scale factor used in grain boundary energy calculations (electronVolts * ?m) Length scale could be nanometers, micrometers, millimeters, as long as it matches the scale used for point coordinates
+265.11
+# temperature of crystal during evolution in Kelvin (useful during Potts generation)
+2320.90
+# number of possible discrete states
+6
+# number of Monte Carlo sweeps
+120
+# x and y bounds
+-4.0 4.0 0.0 6.0
+# grid spacing (for rigid rectililinear or hex meshes) first is x spacing and second is y spacing. a ratio of 1:1 will result in a square mesh, 1:0.8660254 is a regular hexagon mesh)
+0.02 0.01732
+# periodicity. 0 =: aperiodic, 1 =: periodic in y, 2 =: periodic in x, 3 =: periodic everywhere
+0
+# Where should the point data come from?
+rect
