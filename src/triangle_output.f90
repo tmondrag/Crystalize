@@ -131,7 +131,13 @@ CONTAINS
     END IF
     IF(num_attributes .GT. 0) THEN
       DO j=1,num_attributes
-        WRITE(outputFile%getFUnit(),'(/A,I0.2,A,/A)') 'SCALARS attribute_',j,' double','LOOKUP_TABLE default'
+        IF (j==1) THEN
+          WRITE(outputFile%getFUnit(),'(/A,/A)') 'SCALARS Q-state double','LOOKUP_TABLE default'
+        ELSE IF (j==2) THEN
+          WRITE(outputFile%getFUnit(),'(/A,/A)') 'SCALARS grain_id double','LOOKUP_TABLE default'
+        ELSE
+          WRITE(outputFile%getFUnit(),'(/A,I0.2,A,/A)') 'SCALARS attribute_',j,' double','LOOKUP_TABLE default'
+        END IF
         DO i=1,f_shapes%numberofpoints
           WRITE(outputFile%getFUnit(),'(F18.12,1X)',ADVANCE="no") f_shapes%pointattributelist((i-1)+j)
         END DO
@@ -203,18 +209,47 @@ CONTAINS
     CALL polyfile%openWriteNew(outfile_poly)
     CALL nodefile%openWriteNew(outfile_node)
     IF (f_shapes%numberofpoints > 0) THEN
+      WRITE(polyfile%getFUnit(),'(A)') '# VERTICES '
+      WRITE(polyfile%getFUnit(),'(A,I8,A,I1,A,I8,A)') "# Declare ",f_shapes%numberofpoints," vertices, ", &
+                    2, " dimensions, ",f_shapes%numberofpointattributes, " attributes per vertex, and 1 boundary marker per vertex"
+      WRITE(polyfile%getFUnit(),'(A,A)') '# Actual vertex data is in ', outfile_node
       WRITE(polyfile%getFUnit(),'(I8,1X,I1,1X,I8,1X,I1)')0,2,f_shapes%numberofpointattributes,1
+      WRITE(nodefile%getFUnit(),'(A,I8,A,I1,A,I8,A)') "# Declare ",f_shapes%numberofpoints," vertices, ", &
+                    2, " dimensions, ",f_shapes%numberofpointattributes, " attributes per vertex, and 1 boundary marker per vertex"
       WRITE(nodefile%getFUnit(),'(I8,1X,I1,1X,I8,1X,I1)')f_shapes%numberofpoints,2,f_shapes%numberofpointattributes,1
       IF (f_shapes%numberofpointattributes > 0) THEN
-      num_attr = f_shapes%numberofpointattributes
-        DO i = 1,f_shapes%numberofpoints
-          WRITE(outbuffer,'(I8,1X,F14.8,1X,F14.8)')i,f_shapes%pointlist(2*i-1),f_shapes%pointlist(2*i)
-          DO j = 1,num_attr
-            WRITE(outbuffer,'(A,1X,F14.8)') TRIM(outbuffer),f_shapes%pointattributelist(num_attr*(i-1)+j)
+        num_attr = f_shapes%numberofpointattributes
+        IF (f_shapes%numberofpointattributes == 1) THEN
+          WRITE(nodefile%getFUnit(),'(/A)') "# <index> <x> <y> <Q-state> <boundary marker>"
+          DO i = 1,f_shapes%numberofpoints
+            WRITE(outbuffer,'(I8,1X,F14.8,1X,F14.8)')i,f_shapes%pointlist(2*i-1),f_shapes%pointlist(2*i)
+            WRITE(outbuffer,'(A,1X,I8)') TRIM(outbuffer),INT(f_shapes%pointattributelist(i))
+            WRITE(outbuffer,'(A,1X,I1)') TRIM(outbuffer),f_shapes%pointmarkerlist(i)
+            WRITE(nodefile%getFUnit(),'(A)')outbuffer
           END DO
-          WRITE(outbuffer,'(A,1X,I1)') TRIM(outbuffer),f_shapes%pointmarkerlist(i)
-          WRITE(nodefile%getFUnit(),'(A)')outbuffer
-        END DO
+        ELSEIF (f_shapes%numberofpointattributes == 2) THEN
+          WRITE(nodefile%getFUnit(),'(/A)') "# <index> <x> <y> <Q-state> <grain-id> <boundary marker>"
+          DO i = 1,f_shapes%numberofpoints
+            WRITE(outbuffer,'(I8,1X,F14.8,1X,F14.8)')i,f_shapes%pointlist(2*i-1),f_shapes%pointlist(2*i)
+            WRITE(outbuffer,'(A,1X,I8)') TRIM(outbuffer),INT(f_shapes%pointattributelist(2*i-1))
+            WRITE(outbuffer,'(A,1X,I8)') TRIM(outbuffer),INT(f_shapes%pointattributelist(2*i))
+            WRITE(outbuffer,'(A,1X,I1)') TRIM(outbuffer),f_shapes%pointmarkerlist(i)
+            WRITE(nodefile%getFUnit(),'(A)')outbuffer
+          END DO
+        ELSE IF (f_shapes%numberofpointattributes > 2) THEN
+          WRITE(nodefile%getFUnit(),'(/A)') "# <index> <x> <y> <Q-state> <grain-id> <other attributes> <boundary marker>"
+          DO i = 1,f_shapes%numberofpoints
+            WRITE(outbuffer,'(I8,1X,F14.8,1X,F14.8)')i,f_shapes%pointlist(2*i-1),f_shapes%pointlist(2*i)
+            WRITE(outbuffer,'(A,1X,I8)') TRIM(outbuffer),INT(f_shapes%pointattributelist(num_attr*i-num_attr+1))
+            WRITE(outbuffer,'(A,1X,I8)') TRIM(outbuffer),INT(f_shapes%pointattributelist(num_attr*i-num_attr+2))
+            DO j = 3,num_attr
+              WRITE(outbuffer,'(A,1X,F14.8)') TRIM(outbuffer),f_shapes%pointattributelist(num_attr*(i-1)+j)
+            END DO
+            WRITE(outbuffer,'(A,1X,I1)') TRIM(outbuffer),f_shapes%pointmarkerlist(i)
+            WRITE(nodefile%getFUnit(),'(A)')outbuffer
+          END DO
+        END IF
+
       ELSE
         DO i = 1,f_shapes%numberofpoints
           WRITE(outbuffer,'(I8,1X,F14.8,1X,F14.8)')i,f_shapes%pointlist(2*i-1),f_shapes%pointlist(2*i)
@@ -222,27 +257,34 @@ CONTAINS
           WRITE(nodefile%getFUnit(),'(A)')outbuffer
         END DO
       END IF
-      WRITE(polyfile%getFUnit(),'(A)')""
+      WRITE(polyfile%getFUnit(),'(/A)')"# LINE SEGMENTS"
       IF (f_shapes%numberofsegments > 0) THEN
+        WRITE(polyfile%getFUnit(),'(A,I8,A,I1,A)') '# Declare ',f_shapes%numberofsegments,' line segments with ', &
+                                                  1, ' boundary marker each'
         WRITE(polyfile%getFUnit(),'(I8,1X,I1)') f_shapes%numberofsegments,1
+        WRITE(nodefile%getFUnit(),'(/A)') "# <index> <vertex_id 1> <vertex_id 2> <boundary marker>"
         DO i = 1,f_shapes%numberofsegments
           WRITE(polyfile%getFUnit(),'(I8,1X,I8,1X,I8,1X,I1)') i,f_shapes%segmentlist(2*i-1),f_shapes%segmentlist(2*i),1
         END DO
       ELSE
         WRITE(polyfile%getFUnit(),'(I8,1X,I1)') 0,0
       END IF
-      WRITE(polyfile%getFUnit(),'(A)')""
+      WRITE(polyfile%getFUnit(),'(/A)')"# HOLE SEEDS"
+      WRITE(polyfile%getFUnit(),'(A)') "# Declare ", f_shapes%numberofholes, "holes"
       IF (f_shapes%numberofholes > 0) THEN
         WRITE(polyfile%getFUnit(),'(I8)') f_shapes%numberofholes
+        WRITE(polyfile%getFUnit(),'(/A)') "# <index> <x> <y>"
         DO i = 1,f_shapes%numberofholes
           WRITE(polyfile%getFUnit(),'(I8,1X,F14.8,1X,F14.8)') i,f_shapes%holelist(2*i-1),f_shapes%holelist(2*i)
         END DO
       ELSE
         WRITE(polyfile%getFUnit(),'(I8)') 0
       END IF
-      WRITE(polyfile%getFUnit(),'(A)')""
+      WRITE(polyfile%getFUnit(),'(/A)')"# REGIONS"
       IF (f_shapes%numberofregions > 0) THEN
+        WRITE(polyfile%getFUnit(),'(A,I8,A)')"# Declare ", f_shapes%numberofregions, " regions"
         WRITE(polyfile%getFUnit(),'(I8)') f_shapes%numberofregions
+        WRITE(polyfile%getFUnit(),'(A,I8,A)')"# <index> <seed x> <seed y> <attribute> <maximum area>"
         DO i = 1,f_shapes%numberofregions
           WRITE(polyfile%getFUnit(),'(I8,1X,F14.8,1X,F14.8,1X,F14.8,1X,F14.8)') i,f_shapes%regionlist(4*i-3), &
                                                 f_shapes%regionlist(4*i-2),f_shapes%regionlist(4*i-1),f_shapes%regionlist(4*i)
@@ -250,9 +292,13 @@ CONTAINS
       END IF
       IF (f_shapes%numberoftriangles > 0) THEN
         CALL elefile%openWriteNew(outfile_ele)
+        WRITE(elefile%getFUnit(),'(/A)') "# TRIANGLES"
+        WRITE(elefile%getFUnit(),'(A,I8,A,I1,A,I8,A)')"# Declare ",f_shapes%numberoftriangles," triangles made of ",&
+                  f_shapes%numberofcorners, " vertices and with ",f_shapes%numberoftriangleattributes, " attributes each"
         WRITE(elefile%getFUnit(),'(I8,1X,I1,1X,I8)')f_shapes%numberoftriangles,f_shapes%numberofcorners, &
                   f_shapes%numberoftriangleattributes
         IF (f_shapes%numberoftriangleattributes > 0) THEN
+          WRITE(elefile%getFUnit(),'(/A)') "# <index> <vertex_ids> <attributes>"
           num_attr = f_shapes%numberoftriangleattributes
           num_corn = f_shapes%numberofcorners
           DO i = 1,f_shapes%numberoftriangles
@@ -266,6 +312,7 @@ CONTAINS
             WRITE(elefile%getFUnit(),'(A)')outbuffer
           END DO
         ELSE
+          WRITE(elefile%getFUnit(),'(/A)') "# <index> <vertex_ids>"
           num_corn = f_shapes%numberofcorners
           DO i = 1,f_shapes%numberoftriangles
             WRITE(outbuffer,'(I8)')i

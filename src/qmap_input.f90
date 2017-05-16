@@ -97,7 +97,8 @@ CONTAINS
       CALL skip_comments_input(inputFile)
       READ(inputFile%getFunit(),*,iostat=ios,err=150) f_shape%numberofpoints
       f_shape%numberofpoints = f_shape%numberofpoints + 4
-      f_shape%numberofpointattributes    = 0
+      ! attributes: Q-state = 0, grain_id
+      f_shape%numberofpointattributes    = 2
       CALL allocate_points_ftoc(f_shape,c_shape)
       f_shape%pointlist(SIZE(f_shape%pointlist)-7) = latticeData%xBounds(1)
       f_shape%pointlist(SIZE(f_shape%pointlist)-6) = latticeData%yBounds(1)
@@ -107,6 +108,14 @@ CONTAINS
       f_shape%pointlist(SIZE(f_shape%pointlist)-2) = latticeData%yBounds(2)
       f_shape%pointlist(SIZE(f_shape%pointlist)-1) = latticeData%xBounds(1)
       f_shape%pointlist(SIZE(f_shape%pointlist))   = latticeData%yBounds(2)
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-7) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-6) = SIZE(f_shape%pointattributelist)-3
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-5) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-4) = SIZE(f_shape%pointattributelist)-2
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-3) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-2) = SIZE(f_shape%pointattributelist)-1
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-1) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist))   = SIZE(f_shape%pointattributelist)
       f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-3) = 1
       f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-2) = 1
       f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-1) = 1
@@ -128,6 +137,8 @@ CONTAINS
       f_shape%segmentmarkerlist(4) = 1
 
       DO i=1,f_shape%numberofpoints - 4
+        f_shape%pointattributelist(2*i-1) = 0                   ! q-state = 0
+        f_shape%pointattributelist(2*i)   = i                   ! grain_id = vertex index initially
         CALL RANDOM_NUMBER(remainder)
         f_shape%pointlist(2*i-1) = remainder*(latticeData%xBounds(2)-latticeData%xBounds(1))
         f_shape%pointlist(2*i-1) = f_shape%pointlist(2*i-1) + latticeData%xBounds(1)
@@ -180,7 +191,7 @@ CONTAINS
         yPosArray(num_y+2) = latticeData%yBounds(2)
       END IF
       f_shape%numberofpoints             = SIZE(xPosArray)*SIZE(yPosArray) + 4
-      f_shape%numberofpointattributes    = 1
+      f_shape%numberofpointattributes    = 2
       CALL allocate_points_ftoc(f_shape,c_shape)
       DO j = 1, SIZE(yPosArray)
         DO i = 1,SIZE(xPosArray)
@@ -188,7 +199,8 @@ CONTAINS
           f_shape%pointlist(2*(j-1)*SIZE(xPosArray)+2*i) = yPosArray(j)
           CALL RANDOM_NUMBER(remainder)
           remainder = REAL(latticeData%numStates,C_REAL)*remainder
-          f_shape%pointattributelist((j-1)*SIZE(xPosArray)+i) = INT(remainder,C_INT) + 1
+          f_shape%pointattributelist(2*(j-1)*SIZE(xPosArray)+2*i-1) = INT(remainder,C_INT) + 1
+          f_shape%pointattributelist(2*(j-1)*SIZE(xPosArray)+2*i) = (j-1)*SIZE(xPosArray) + i
           f_shape%pointmarkerlist((j-1)*SIZE(xPosArray)+i) = 0
         END DO
       END DO
@@ -200,10 +212,14 @@ CONTAINS
       f_shape%pointlist(SIZE(f_shape%pointlist)-2) = latticeData%yBounds(2)
       f_shape%pointlist(SIZE(f_shape%pointlist)-1) = latticeData%xBounds(1)
       f_shape%pointlist(SIZE(f_shape%pointlist))   = latticeData%yBounds(2)
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-7) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-6) = SIZE(f_shape%pointattributelist)-3
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-5) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-4) = SIZE(f_shape%pointattributelist)-2
       f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-3) = 0
-      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-2) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-2) = SIZE(f_shape%pointattributelist)-1
       f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-1) = 0
-      f_shape%pointattributelist(SIZE(f_shape%pointattributelist))   = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist))   = SIZE(f_shape%pointattributelist)
       f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-3) = 1
       f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-2) = 1
       f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-1) = 1
@@ -269,7 +285,7 @@ CONTAINS
         yPosArray(1:num_y+1) = (/(latticeData%yBounds(1)+latticeData%gridSpacing(2)*REAL(i),i = 0,num_y,1)/)
         yPosArray(num_y+2) = latticeData%yBounds(2)
       END IF
-      f_shape%numberofpointattributes    = 1
+      f_shape%numberofpointattributes    = 2
       IF(MOD(SIZE(yPosArray),2) == 0 ) THEN
         f_shape%numberofpoints = (SIZE(xPosArray)-1)*SIZE(yPosArray) + SIZE(yPosArray)/2 + 4
       ELSE
@@ -284,10 +300,14 @@ CONTAINS
       f_shape%pointlist(SIZE(f_shape%pointlist)-2) = latticeData%yBounds(2)
       f_shape%pointlist(SIZE(f_shape%pointlist)-1) = latticeData%xBounds(1)
       f_shape%pointlist(SIZE(f_shape%pointlist))   = latticeData%yBounds(2)
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-7) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-6) = SIZE(f_shape%pointattributelist)-3
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-5) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-4) = SIZE(f_shape%pointattributelist)-2
       f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-3) = 0
-      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-2) = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-2) = SIZE(f_shape%pointattributelist)-1
       f_shape%pointattributelist(SIZE(f_shape%pointattributelist)-1) = 0
-      f_shape%pointattributelist(SIZE(f_shape%pointattributelist))   = 0
+      f_shape%pointattributelist(SIZE(f_shape%pointattributelist))   = SIZE(f_shape%pointattributelist)
       f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-3) = 1
       f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-2) = 1
       f_shape%pointmarkerlist(SIZE(f_shape%pointmarkerlist)-1) = 1
@@ -321,7 +341,8 @@ CONTAINS
             l = l+1
             CALL RANDOM_NUMBER(remainder)
             remainder = REAL(latticeData%numStates,C_REAL)*remainder
-            f_shape%pointattributelist(l) = INT(remainder,C_INT) + 1
+            f_shape%pointattributelist(2*l-1) = INT(remainder,C_INT) + 1
+            f_shape%pointattributelist(2*l)   = l
             f_shape%pointmarkerlist(l) = 0
           ELSE
              k = k+1
@@ -331,7 +352,8 @@ CONTAINS
              l = l+1
              CALL RANDOM_NUMBER(remainder)
              remainder = REAL(latticeData%numStates,C_REAL)*remainder
-             f_shape%pointattributelist(l) = INT(remainder,C_INT) + 1
+             f_shape%pointattributelist(2*l-1) = INT(remainder,C_INT) + 1
+             f_shape%pointattributelist(2*l)   = l
              f_shape%pointmarkerlist(l) = 0
           END IF
         END DO
@@ -352,7 +374,7 @@ CONTAINS
       ! output the bare naked points and outer bounds to PSLG for later runs
       CALL output_triangle_to_poly(f_shape,TRIM(outfileroot)//"_init")
     END IF
-    flags = TRIM("pqcO")//C_NULL_CHAR
+    flags = TRIM("pqcOA")//C_NULL_CHAR
     CALL init_outputs(c_shape_out)
     CALL init_outputs(c_shape_vorout)
     ! triangulate initial points
@@ -360,6 +382,7 @@ CONTAINS
     CALL copytriangles_c_to_f(c_shape_out,f_shape_out)
     ! output the first triangulation to vtk for visualization/verification
     CALL output_triangle_to_vtk(f_shape_out,TRIM(outfileroot)//"_000000.vtk")
+    CALL output_triangle_to_poly(f_shape_out,TRIM(outfileroot)//"_000000")
     CALL deallocate_triangulateio(f_shape, input=.TRUE., neigh=.FALSE., voroni=.FALSE.)
     CALL deallocate_triangulateio(f_shape_out, input=.FALSE., neigh=.FALSE., voroni=.FALSE.)
     RETURN
