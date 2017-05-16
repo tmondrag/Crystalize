@@ -6,7 +6,7 @@ CONTAINS
   SUBROUTINE transfer_lattice_to_triangle(inLattice,f_shape,c_shape)
     USE basictypes, only: Lattice
     USE triangle_c_wrap, only: triangulateio,f_triangulateio,allocate_points_ftoc,allocate_segments,allocate_regions,allocate_holes
-    USE triangle_c_wrap, only: C_REAL
+    USE triangle_c_wrap, only: C_REAL,allocate_triangles
     IMPLICIT NONE
     TYPE(lattice),INTENT(IN)                          :: inLattice
     TYPE(triangulateio),INTENT(OUT)                   :: c_shape
@@ -52,17 +52,16 @@ CONTAINS
   END SUBROUTINE transfer_lattice_to_triangle
 
   ! This is useful after the first triangulation in preparation for grain discovery and border finding
-  SUBROUTINE transfer_triangle_to_lattice(f_shape,c_shape,outLattice)
+  SUBROUTINE transfer_triangle_to_lattice(f_shape,outLattice)
     USE, INTRINSIC :: ISO_FORTRAN_ENV, only: stderr => ERROR_UNIT
     USE, INTRINSIC :: ISO_C_BINDING, only: C_INT
     USE basictypes, only: Lattice, LatticeFacetSItem
-    USE triangle_c_wrap, only: triangulateio,f_triangulateio,allocate_points_ftoc,allocate_segments,allocate_regions,allocate_holes
+    USE triangle_c_wrap, only: f_triangulateio,allocate_points_ftoc,allocate_segments,allocate_regions,allocate_holes
     USE triangle_c_wrap, only: C_REAL
     IMPLICIT NONE
     TYPE(lattice),INTENT(OUT)                         :: outLattice
-    TYPE(triangulateio),INTENT(IN)                    :: c_shape
     TYPE(f_triangulateio),INTENT(IN)                  :: f_shape
-    INTEGER                                           :: i, err, facetIndex
+    INTEGER                                           :: i, err, facetIndex, num_attr
     INTEGER(C_INT)                                    :: primoVertex, secundoVertex, tertioVertex
     REAL(C_REAL),DIMENSION(1:2)                       :: edgeA,edgeB,edgeC
     REAL(C_REAL)                                      :: lenA,lenB,lenC
@@ -98,7 +97,12 @@ CONTAINS
       outLattice%vertices(i)%nIndex = i
       outLattice%vertices(i)%boundary = f_shape%pointmarkerlist(i)
       outLattice%vertices(i)%location = (/f_shape%pointlist(2*i-1), f_shape%pointlist(2*i)/)
-      outLattice%vertices(i)%qState = INT(f_shape%pointattributelist(i),C_INT) ! First triangulization should only have a q-state
+      IF(f_shape%numberofpointattributes < 0) THEN
+        num_attr = f_shape%numberofpointattributes
+        outLattice%vertices(i)%qState = INT(f_shape%pointattributelist(num_attr*i-num_attr+1),C_INT)
+      ELSE
+        outLattice%vertices(i)%qState = 0
+      END IF
       CALL outLattice%facetReference(i)%listHead%init(i)
     END DO
     DO i = 1,outLattice%numFacets

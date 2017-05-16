@@ -3,7 +3,7 @@
 ! USACE ERDC Information Technology Laboratory
 ! Computational Analysis Branch
 ! Tomas.A.Mondragon@erdc.dren.mil
-!   delivered 06 Feb 2016
+!   delivered 16 Apr 2017
 MODULE qmap_input
   IMPLICIT NONE
 
@@ -18,6 +18,7 @@ CONTAINS
     USE triangle_c_wrap, only: C_REAL,allocate_points_ftoc,allocate_segments,allocate_holes,allocate_regions
     USE triangle_input, only: read_shapes
     USE triangle_output, only: output_triangle_to_vtk, output_triangle_to_poly
+    USE trans_lattice_triangle, only: transfer_triangle_to_lattice
     USE,INTRINSIC:: ISO_C_BINDING, only:C_NULL_CHAR,C_CHAR,C_INT
     IMPLICIT NONE
 
@@ -383,6 +384,7 @@ CONTAINS
     ! output the first triangulation to vtk for visualization/verification
     CALL output_triangle_to_vtk(f_shape_out,TRIM(outfileroot)//"_000000.vtk")
     CALL output_triangle_to_poly(f_shape_out,TRIM(outfileroot)//"_000000")
+    CALL transfer_triangle_to_lattice(f_shape_out,latticeData)
     CALL deallocate_triangulateio(f_shape, input=.TRUE., neigh=.FALSE., voroni=.FALSE.)
     CALL deallocate_triangulateio(f_shape_out, input=.FALSE., neigh=.FALSE., voroni=.FALSE.)
     RETURN

@@ -255,8 +255,8 @@ CONTAINS
     END IF
     DO
       IF (curr%isHead) THEN
-        WRITE(stderr,"(A,I8,A,I8,A)") "WARNING: Search for a facet with vertices ", firstIndex, " , ", secondIndex, " in", &
-             " in counter-clockwise order failed. Assuming line segment is part of outer bounds."
+        ! WRITE(stderr,"(A,I8,A,I8,A)") "WARNING: Search for a facet with vertices ", firstIndex, " , ", secondIndex, " in", &
+        !      " in counter-clockwise order failed. Assuming line segment is part of outer bounds."
         facetIndex = 0
         RETURN
       END IF
