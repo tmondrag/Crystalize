@@ -81,12 +81,31 @@ MODULE basictypes
     TYPE(LatticeFacetSItem)                     :: listHead
   END TYPE LatticeFacetSHead
 
+  ! Lattice facet search data structure list item
+  TYPE LatticeEdgeSItem
+    LOGICAL(C_BOOL)                             :: isHead
+    INTEGER(C_INT)                              :: vertexIndex
+    INTEGER(C_INT)                              :: edgeIndex
+    TYPE(LatticeEdgeSItem),POINTER              :: next
+  CONTAINS
+    PROCEDURE :: init   => init_lattice_edge_list
+    PROCEDURE :: push   => push_lattice_edge_list
+    PROCEDURE :: pop    => pop_lattice_edge_list
+    PROCEDURE :: delete => delete_lattice_edge_list
+  END TYPE LatticeEdgeSItem
+
+  ! Lattice facet search data structure list head/array item
+  TYPE LatticeEdgeSHead
+    TYPE(LatticeEdgeSItem)                     :: listHead
+  END TYPE LatticeEdgeSHead
+
   ! Lattice - container for raw and simplistic data. vertices, facets, edges, & attached info
   TYPE Lattice
     TYPE(LatticeVertex),DIMENSION(:),ALLOCATABLE:: vertices         ! array of vertices
     TYPE(LatticeEdge),DIMENSION(:),ALLOCATABLE  :: edges            ! array of edges
     TYPE(LatticeFacet),DIMENSION(:),ALLOCATABLE :: facets           ! array of facets
-    TYPE(LatticeFacetSHead),DIMENSION(:),ALLOCATABLE:: facetReference
+    TYPE(LatticeFacetSHead),DIMENSION(:),ALLOCATABLE:: facetReference ! reference of ordered vertices(edges) to facets
+    TYPE(LatticeEdgeSHead),DIMENSION(:),ALLOCATABLE:: edgeHash      !reference of verices to neighor edges and vertices
     INTEGER(C_INT)                              :: numVertices      ! number of vertices for quick reference
     INTEGER(C_INT)                              :: numEdges         ! number of edges for quick reference
     INTEGER(C_INT)                              :: numFacets        ! number of facets for quick reference
@@ -94,7 +113,9 @@ MODULE basictypes
     INTEGER(C_INT)                              :: numStates        ! number of possible discrete states
     INTEGER(C_INT)                              :: mcSweeps         ! number of Monte-Carlo "sweeps" to perform during generation
     REAL(C_REAL)                                :: temperature      ! temperature of crystal during evolution (useful during Potts generation)
-    REAL(C_REAL)                                :: enrgPerLength    ! constant used in grain boundary energy calculations (electronVolts per ?m)
+    REAL(C_REAL)                                :: enrgScale        ! constant used in grain boundary energy calculations (electronVolts per ?m^2)
+    REAL(C_REAL)                                :: restBose         ! rest length between vertices with the same Q-State
+    REAL(C_REAL)                                :: restFermi        ! rest length between vertices with different Q-State
     REAL(C_REAL),DIMENSION(1:2)                 :: gridSpacing      ! x and y spacing used in rectangular grid in Potts generator
     REAL(C_REAL),DIMENSION(1:2)                 :: xBounds          ! min and max x coordinate
     REAL(C_REAL),DIMENSION(1:2)                 :: yBounds          ! min and max y coordinate
@@ -268,4 +289,120 @@ CONTAINS
     END DO
   END FUNCTION search_lattice_facet_list
 
+  ! for building the edge hash after a lattice has been built. It is far more efficient to do this while the lattice is being built
+  FUNCTION build_edge_hash(inLattice) RESULT(edgeHash)
+    USE basictypes, only: Lattice
+    IMPLICIT NONE
+    TYPE(Lattice)                                     :: inLattice
+    TYPE(LatticeEdgeSHead),DIMENSION(:),ALLOCATABLE   :: edgeHash
+    INTEGER                                           :: i,j
+
+    ALLOCATE(edgeHash(1:inLattice%numVertices))
+    DO i = 1, inLattice%numVertices
+      CALL edgeHash(i)%listHead%init(i)
+      DO j = 1, inLattice%numEdges
+        IF (inLattice%edges(j)%primoVertex == i) THEN
+          CALL edgeHash(i)%listHead%push(inLattice%edges(j)%secundoVertex,j)
+        ELSE IF (inLattice%edges(j)%secundoVertex == i) THEN
+          CALL edgeHash(i)%listHead%push(inLattice%edges(j)%primoVertex,j)
+        END IF
+      END DO
+    END DO
+  END FUNCTION build_edge_hash
+
+  SUBROUTINE deallocate_edge_hash(edgeHash)
+    IMPLICIT NONE
+    TYPE(LatticeEdgeSHead),DIMENSION(:),INTENT(INOUT) :: edgeHash
+    INTEGER                                           :: i,j
+
+    IF (ALLOCATED(edgeHash)) THEN
+      DO i = 1, LEN(edgeHash)
+        CALL edgeHash(i)%listHead%delete()
+      END DO
+      DEALLOCATE(edgeHash)
+    END IF
+  END SUBROUTINE deallocate_edge_hash
+
+  ! Initialize a lattice edge search sublist
+  SUBROUTINE init_lattice_edge_list(this,primoVvertexIndex)
+    IMPLICIT NONE
+    CLASS(LatticeEdgeSItem),INTENT(INOUT),TARGET  :: this
+    INTEGER(C_INT),INTENT(IN)                     :: vertexIndex
+
+    this%isHead = .TRUE.
+    this%vertexIndex = primoVertexIndex
+    this%next => this
+  END SUBROUTINE init_lattice_edge_list
+
+  ! push a lattice edge onto the search sublist
+  SUBROUTINE push_lattice_edge_list(this,secundoVertexIndex,edgeIndex)
+    IMPLICIT NONE
+    CLASS(LatticeEdgeSItem),INTENT(INOUT)         :: this
+    INTEGER(C_INT),INTENT(IN)                     :: secundoVertexIndex,edgeIndex
+    TYPE(LatticeEdgeSItem),POINTER                :: curr
+
+    ALLOCATE(curr)
+    curr%isHead = .FALSE.
+    curr%vertexIndex = secundoVertexIndex
+    curr%edgeIndex = edgeIndex
+    curr%next => this%next
+    this%next => curr
+  END SUBROUTINE push_lattice_facet_list
+
+  ! mosly useless, but here for the sake of completeness
+  FUNCTION pop_lattice_edge_list(this) RESULT(edgeIndex)
+    IMPLICIT NONE
+    CLASS(LatticeEdgeSItem)                       :: this
+    INTEGER                                       :: edgeIndex
+    TYPE(LatticeEdgeSItem),POINTER                :: prev,curr,next
+
+    curr => this%next
+    next => curr%next
+    IF (this%isHead) THEN
+      edgeIndex = curr%edgeIndex
+      this%next => next
+      curr%next => curr
+      DEALLOCATE(curr)
+      RETURN
+    ELSE
+      DO
+        prev => curr
+        curr => prev%next
+        next => prev%next%next
+        IF (prev%isHead) THEN
+          edgeIndex = curr%edgeIndex
+          prev%next => next
+          curr%next => curr
+          DEALLOCATE(curr)
+          RETURN
+        END IF
+      END DO
+    END IF
+  END FUNCTION pop_lattice_edge_list
+
+  ! delete and deallocate a edge list the proper way
+  ! Might cause problems if this is not the list head, causing this to de deallocated
+  SUBROUTINE delete_lattice_edge_list(this)
+    USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: stderr -> ERROR_UNIT
+    IMPLICIT NONE
+    CLASS(LatticeEdgeSItem),INTENT(IN),TARGET    :: this
+    TYPE(LatticeEdgeSItem),POINTER               :: prev,curr,next
+
+    prev => this
+    curr => this%next
+    next => this%next%next
+    IF (.NOT. this%isHead) THEN
+      WRITE(stderr, '(A)') 'ERROR: Attempted list deallocation beginning at middle of list.'
+      WRITE(stderr, '(A)') '       Start deallocation at list head for safety.'
+      STOP 1
+    END IF
+    DO
+      IF (curr%isHead) EXIT
+      curr%next => curr
+      DEALLOCATE(curr)
+      prev%next => next
+      curr => prev%next
+      next => prev%next%next
+    END DO
+  END SUBROUTINE delete_lattice_edge_list
 END MODULE basictypes

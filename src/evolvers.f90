@@ -8,127 +8,102 @@
 MODULE evolvers
   USE, INTRINSIC :: ISO_C_BINDING, only: C_INT,C_BOOL
   USE            :: triangle_c_wrap, only: C_REAL
-  ! Lattice facet search data structure list item
-  TYPE LatticeEdgeSItem
-    LOGICAL(C_BOOL)                             :: isHead
-    INTEGER(C_INT)                              :: vertexIndex
-    INTEGER(C_INT)                              :: edgeIndex
-    TYPE(LatticeEdgeSItem),POINTER              :: next
-  CONTAINS
-    PROCEDURE :: init   => init_lattice_edge_list
-    PROCEDURE :: push   => push_lattice_edge_list
-    PROCEDURE :: pop    => pop_lattice_edge_list
-    PROCEDURE :: delete => delete_lattice_edge_list
-  END TYPE LatticeEdgeSItem
 
-  ! Lattice facet search data structure list head/array item
-  TYPE LatticeEdgeSHead
-    TYPE(LatticeEdgeSItem)                     :: listHead
-  END TYPE LatticeEdgeSHead
 
 CONTAINS
-  SUBROUTINE evolve_qstates
+  SUBROUTINE evolve_qstates(inLattice)
+    USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: stderr -> ERROR_UNIT, stdout -> OUTPUT_UNIT
+    USE basictypes, only: Lattice
+    IMPLICIT NONE
+    TYPE(Lattice),INTENT(INOUT)                       :: inLattice
+    TYPE(LatticeEdgeSHead),DIMENSION(:),ALLOCATABLE   :: edgeHash
+    INTEGER                                           :: i,j,k
+    REAL                                              :: tmp
+
+    edgeHash = build_edge_hash(inLattice)
+    DO i = 1, inLattice%mcSweeps
+      DO j = 1, inLattice%numVertices
+        CALL RANDOM_NUMBER(tmp)
+        k = CEILING(inLattice%numVertices*tmp)
+        CALL flip_qstate_isometric(inLattice,edgeHash,k)
+      END DO
+      IF(MOD(i,10) == 0) THEN
+        WRITE(stdout,'(A,I8,A)') "Monte-Carlo step ",i," elapsed." ! print out to entertain the user during long process
+      END IF
+    END DO
+    WRITE(stdout,'(A,I8,A)') "Q-map generated after ", i, " Monte-Carlo steps."
   END SUBROUTINE evolve_qstates
 
-  SUBROUTINE evolve_positions
+  SUBROUTINE evolve_positions(inLattice)
+    USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: stderr -> ERROR_UNIT, stdout -> OUTPUT_UNIT
+    USE basictypes, only: Lattice
+    IMPLICIT NONE
+    TYPE(Lattice),INTENT(INOUT)                       :: inLattice
+    TYPE(LatticeEdgeSHead),DIMENSION(:),ALLOCATABLE   :: edgeHash
+    INTEGER                                           :: i,j,k
+    REAL                                              :: tmp
+
+    edgeHash = build_edge_hash(inLattice)
+    DO i = 1, inLattice%mcSweeps
+      DO j = 1, inLattice%numVertices
+        CALL RANDOM_NUMBER(tmp)
+        k = CEILING(inLattice%numVertices*tmp)
+        CALL flip_position_isometric(inLattice,edgeHash,k)
+      END DO
+      IF(MOD(i,10) == 0) THEN
+        WRITE(stdout,'(A,I8,A)') "Monte-Carlo step ",i," elapsed." ! print out to entertain the user during long process
+      END IF
+    END DO
+    WRITE(stdout,'(A,I8,A)') "Position map generated after ", i, " Monte-Carlo steps."
   END SUBROUTINE evolve_positions
 
-  SUBROUTINE flip_qstate
-  END SUBROUTINE flip_qstate
-
-  SUBROUTINE shift_position
-  END SUBROUTINE shift_position
-
-  FUNCTION build_edge_hash(inLattice) RESULT(edgeHash)
-    IMPLICIT NONE
+  SUBROUTINE flip_qstate_isometric(inLattice,edgeHash,vertexIndex)
     USE basictypes, only: Lattice
-    TYPE(Lattice)                                     :: inLattice
-    TYPE(LatticeEdgeSHead),DIMENSION(:),ALLOCATABLE   :: edgeHash
-
-    ALLOCATE(edgeHash(1:inLattice%numVertices))
-  END FUNCTION build_edge_hash
-
-  ! Initialize a lattice edge search sublist
-  SUBROUTINE init_lattice_edge_list(this,vertexIndex)
     IMPLICIT NONE
-    CLASS(LatticeEdgeSItem),INTENT(INOUT),TARGET  :: this
-    INTEGER(C_INT),INTENT(IN)                     :: vertexIndex
+    TYPE(Lattice),INTENT(INOUT)                       :: inLattice
+    TYPE(LatticeEdgeSHead),DIMENSION(:),INTENT(IN)    :: edgeHash
+    INTEGER,INTENT(IN)                                :: vertexIndex
+    REAL                                              :: enrg1,enrg2
+    INTEGER                                           :: presentState, randomState
+    INTEGER                                           :: numNeighbors,i,edgeIndex,neighborIndex
+    INTEGER,DIMENSION(:)                              :: neighborStates
+    REAL,DIMENSION(:)                                 :: neighborDistances
+    TYPE(LatticeEdgeSItem),POINTER                    :: curr
 
-    this%isHead = .TRUE.
-    this%vertexIndex = vertexIndex
-    this%next => this
-  END SUBROUTINE init_lattice_edge_list
-
-  ! push a lattice edge onto the search sublist
-  SUBROUTINE push_lattice_edge_list(this,vertexIndex,edgeIndex)
-    IMPLICIT NONE
-    CLASS(LatticeEdgeSItem),INTENT(INOUT)         :: this
-    INTEGER(C_INT),INTENT(IN)                     :: vertexIndex,edgeIndex
-    TYPE(LatticeEdgeSItem),POINTER                :: curr
-
-    ALLOCATE(curr)
-    curr%isHead = .FALSE.
-    curr%vertexIndex = vertexIndex
-    curr%facetIndex = facetIndex
-    curr%next => this%next
-    this%next => curr
-  END SUBROUTINE push_lattice_facet_list
-
-  ! mosly useless, but here for the sake of completeness
-  FUNCTION pop_lattice_edge_list(this) RESULT(edgeIndex)
-    IMPLICIT NONE
-    CLASS(LatticeEdgeSItem)                       :: this
-    INTEGER                                       :: edgeIndex
-    TYPE(LatticeEdgeSItem),POINTER                :: prev,curr,next
-
-    curr => this%next
-    next => curr%next
-    IF (this%isHead) THEN
-      edgeIndex = curr%edgeIndex
-      this%next => next
-      curr%next => curr
-      DEALLOCATE(curr)
-      RETURN
-    ELSE
-      DO
-        prev => curr
-        curr => prev%next
-        next => prev%next%next
-        IF (prev%isHead) THEN
-          edgeIndex = curr%edgeIndex
-          prev%next => next
-          curr%next => curr
-          DEALLOCATE(curr)
-          RETURN
-        END IF
-      END DO
-    END IF
-  END FUNCTION pop_lattice_edge_list
-
-  ! delete and deallocate a edge list the proper way
-  SUBROUTINE delete_lattice_edge_list(this)
-    IMPLICIT NONE
-    CLASS(LatticeEdgeSItem),INTENT(IN),TARGET    :: this
-    TYPE(LatticeEdgeSItem),POINTER               :: prev,curr,next
-
-    prev => this
-    curr => this%next
-    next => this%next%next
-    IF (.NOT. this%isHead) THEN
-      DO
-        prev => curr
-        curr => prev%next
-        next => prev%next%next
-        IF (prev%isHead) EXIT
-      END DO
-    END IF
+    presentState = inLattice%vertices(vertexIndex)%qState
+    curr => edgeHash(vertexIndex)%listHead
+    numNeighbors = 0
     DO
+      curr => curr%next
       IF (curr%isHead) EXIT
-      curr%next => curr
-      DEALLOCATE(curr)
-      prev%next => next
-      curr => prev%next
-      next => prev%next%next
+      numNeighbors = numNeighbors + 1
     END DO
-  END SUBROUTINE delete_lattice_edge_list
+    ALLOCATE(neighborStates(numNeighbors),neighborDistances(numNeighbors))
+    curr => edgeHash(vertexIndex)%listHead
+    i = 0
+    DO
+      curr => curr%next
+      IF (curr%isHead) EXIT
+      i = i + 1
+      edgeIndex = curr%edgeIndex
+      IF(inLattice%edges(edgeIndex)%primoVertex == vertexIndex) THEN
+        neighborIndex = inLattice%edges(edgeIndex)%secundoVertex
+      ELSE IF (inLattice%edges(edgeIndex)%secundoVertex == vertexIndex) THEN
+        neighborIndex = inLattice%edges(edgeIndex)%primoVertex
+      END IF
+      neighborStates(i) = inLattice%vertices(neighborIndex)%qState
+      neighborDistances(i) = inLattice%edges(edgeIndex)%length
+    END DO
+
+    enrg1
+  END SUBROUTINE flip_qstate_isometric
+
+  SUBROUTINE shift_position_isometric(inLattice,edgeHash,vertexIndex)
+    USE basictypes, only: Lattice
+    IMPLICIT NONE
+    TYPE(Lattice),INTENT(INOUT)                       :: inLattice
+    TYPE(LatticeEdgeSHead),DIMENSION(:),INTENT(IN)    :: edgeHash
+    INTEGER,INTENT(IN)                                :: vertexIndex
+  END SUBROUTINE shift_position_isometric
+
 END MODULE evolvers

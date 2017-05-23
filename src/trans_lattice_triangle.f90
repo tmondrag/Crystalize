@@ -58,6 +58,7 @@ CONTAINS
     USE basictypes, only: Lattice, LatticeFacetSItem
     USE triangle_c_wrap, only: f_triangulateio,allocate_points_ftoc,allocate_segments,allocate_regions,allocate_holes
     USE triangle_c_wrap, only: C_REAL
+    USE energyCalc, only: calculate_edge_energy(enrgScale,restBose,restFermi,q1,q2,length)
     IMPLICIT NONE
     TYPE(lattice),INTENT(OUT)                         :: outLattice
     TYPE(f_triangulateio),INTENT(IN)                  :: f_shape
@@ -67,6 +68,8 @@ CONTAINS
     REAL(C_REAL)                                      :: lenA,lenB,lenC
     REAL(C_REAL)                                      :: baryA,baryB,baryC
     REAL(C_REAL)                                      :: areaABC
+    REAL(C_REAL)                                      :: enrgScale,restBose,restFermi,length
+    INTEGER(C_INT)                                    :: q1,q2
 
     outLattice%numVertices = f_shape%numberofpoints
     outLattice%numEdges = f_shape%numberofsegments
@@ -80,6 +83,11 @@ CONTAINS
     ALLOCATE(outLattice%facetReference(1:outLattice%numVertices), STAT=err)
     IF (err /= 0) THEN
       WRITE(stderr,*) "outLattice%facetReference: Allocation request denied"
+      STOP
+    END IF
+    ALLOCATE(outLattice%edgeHash(1:outLattice%numVertices), STAT=err)
+    IF (err /= 0) THEN
+      WRITE(stderr,*) "outLattice%edgeHash: Allocation request denied"
       STOP
     END IF
     ALLOCATE(outLattice%edges(1:outLattice%numEdges), STAT=err)
@@ -97,13 +105,14 @@ CONTAINS
       outLattice%vertices(i)%nIndex = i
       outLattice%vertices(i)%boundary = f_shape%pointmarkerlist(i)
       outLattice%vertices(i)%location = (/f_shape%pointlist(2*i-1), f_shape%pointlist(2*i)/)
-      IF(f_shape%numberofpointattributes < 0) THEN
+      IF(f_shape%numberofpointattributes > 0) THEN
         num_attr = f_shape%numberofpointattributes
         outLattice%vertices(i)%qState = INT(f_shape%pointattributelist(num_attr*i-num_attr+1),C_INT)
       ELSE
         outLattice%vertices(i)%qState = 0
       END IF
       CALL outLattice%facetReference(i)%listHead%init(i)
+      CALL outLattice%edgeHash(i)%listHead%init(i)
     END DO
     DO i = 1,outLattice%numFacets
       outLattice%facets(i)%fIndex = i
@@ -147,6 +156,9 @@ CONTAINS
     outLattice%facets(0)%area = 0.0
     ! let center be some garbage value
     ! vertices will have to be handled later
+    enrgScale = outLattice%enrgScale
+    restBose  = outLattice%restBose
+    restFermi = outLattice%restFermi
     DO i = 1,outLattice%numEdges
       outLattice%edges(i)%eIndex = i
       outLattice%edges(i)%is_fake = .FALSE.
@@ -162,6 +174,14 @@ CONTAINS
       IF (outLattice%edges(i)%orientation < 0.0_C_REAL) THEN
         outLattice%edges(i)%orientation = outLattice%edges(i)%orientation + ATAN2(1.0_C_REAL,0.0_C_REAL) ! adds pi
       END IF
+      CALL outLattice%edgeHash(primoVertex)%listHead%push(secundoVertex,i)
+      CALL outLattice%edgeHash(secundoVertex)%listHead%push(primoVertex,i)
+      !!!! ENERGY CALCULATION !!!! fiddling with this may improve how well this simulates reality!
+      length    = outLattice%edges(i)%length
+      q1        = outLattice%vertices(primoVertex)%qState
+      q2        = outLattice%vertices(secundoVertex)%qState
+      outLattice%edges(i)%enrgEdge = calculate_edge_energy(enrgScale,restBose,restFermi,q1,q2,length)
+
       facetIndex = outLattice%facetReference(primoVertex)%listHead%search(secundoVertex)
       outLattice%edges(i)%sinesterFacet = facetIndex
       IF (primoVertex == outLattice%facets(facetIndex)%primoVertex) THEN

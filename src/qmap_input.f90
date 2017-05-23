@@ -58,8 +58,8 @@ CONTAINS
 
     CALL inputFile%openReadOnly(filename)
     CALL skip_comments_input(inputFile)
-    ! constant used in grain boundary energy calculations (electronVolts * ?m) Length scale could be nanometers, micrometers, millimeters, as long as it matches the scale used for point coordinates
-    READ(inputFile%getFunit(),*,iostat=ios,err=700) latticeData%enrgPerLength
+    ! constant used in grain boundary energy calculations (electronVolts * ?m^2) Length scale could be nanometers, micrometers, millimeters, as long as it matches the scale used for point coordinates
+    READ(inputFile%getFunit(),*,iostat=ios,err=700) latticeData%enrgScale
     CALL skip_comments_input(inputFile)
     ! temperature of crystal during evolution (useful during Potts generation)
     READ(inputFile%getFunit(),*,iostat=ios,err=600) latticeData%temperature
