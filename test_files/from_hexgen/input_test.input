@@ -2,6 +2,8 @@
 # First, describe the bulk properties of the material and simulation
 # energy scale factor used in grain boundary energy calculations (electronVolts * ?m) Length scale could be nanometers, micrometers, millimeters, as long as it matches the scale used for point coordinates
 265.11
+# Rest lengths for "bonds" between vertices in the same qstate and orthogonal qstates. smame length scale as x and y coordinates
+0.02 0.02
 # temperature of crystal during evolution in Kelvin (useful during Potts generation)
 2320.90
 # number of possible discrete states

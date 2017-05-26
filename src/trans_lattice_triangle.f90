@@ -58,7 +58,7 @@ CONTAINS
     USE basictypes, only: Lattice, LatticeFacetSItem
     USE triangle_c_wrap, only: f_triangulateio,allocate_points_ftoc,allocate_segments,allocate_regions,allocate_holes
     USE triangle_c_wrap, only: C_REAL
-    USE energyCalc, only: calculate_edge_energy(enrgScale,restBose,restFermi,q1,q2,length)
+    USE energyCalc, only: calculate_edge_energy
     IMPLICIT NONE
     TYPE(lattice),INTENT(OUT)                         :: outLattice
     TYPE(f_triangulateio),INTENT(IN)                  :: f_shape

@@ -4,3 +4,8 @@ bin
 *.vtk
 .cproject
 .project
+input_test_init.node
+input_test_init.poly
+input_test_000000.ele
+input_test_000000.node
+input_test_000000.poly

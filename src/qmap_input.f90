@@ -37,6 +37,7 @@ CONTAINS
     INTEGER                                           :: i,j,k,l
     REAL(C_REAL)                                      :: remainder
     REAL(C_REAL),DIMENSION(:),ALLOCATABLE             :: xPosArray, yPosArray
+    LOGICAL                                           :: isQmap, needsEvolve
 
     CHARACTER(LEN=1),PARAMETER                        :: dirSep = '/'
     INTEGER                                           :: ls
@@ -60,6 +61,9 @@ CONTAINS
     CALL skip_comments_input(inputFile)
     ! constant used in grain boundary energy calculations (electronVolts * ?m^2) Length scale could be nanometers, micrometers, millimeters, as long as it matches the scale used for point coordinates
     READ(inputFile%getFunit(),*,iostat=ios,err=700) latticeData%enrgScale
+    CALL skip_comments_input(inputFile)
+    ! Rest lengths for "bonds" between vertices in the same qstate and orthogonal qstates. smame length scale as x and y coordinates
+    READ(inputFile%getFunit(),*,iostat=ios,err=750) latticeData%restBose, latticeData%restFermi
     CALL skip_comments_input(inputFile)
     ! temperature of crystal during evolution (useful during Potts generation)
     READ(inputFile%getFunit(),*,iostat=ios,err=600) latticeData%temperature
@@ -90,6 +94,18 @@ CONTAINS
       polyfilename = TRIM(infileroot)//TRIM(polyfilename)
       ! Read in point and shape data
       CALL read_shapes(polyfilename,c_shape,f_shape)
+      ! should the boundary finder focus on positions or q-states?
+      CALL skip_comments_input(inputFile)
+      READ(inputFile%getFunit(),*,iostat=ios,err=800) mapType
+      IF (maptype == 'states') THEN
+        isQmap = .TRUE.
+        needsEvolve = .FALSE.
+      ELSEIF (maptype == 'positions') THEN
+        isQmap = .FALSE.
+        needsEvolve = .FALSE.
+      ELSE
+        GOTO 800
+      ENDIF
 
     ! Generate point data, no Q-state, points at random positions
     ! for use with the positional evolver and the orientation based boundary finder
@@ -148,6 +164,8 @@ CONTAINS
         f_shape%pointlist(2*i)   = f_shape%pointlist(2*i) + latticeData%yBounds(1)
         f_shape%pointmarkerlist(i) = 0
       END DO
+      isQmap = .FALSE.
+      needsEvolve = .TRUE.
 
     ! Generate point data, random Q-state, points arranged in a rectilinear grid
     ! for use with the Q-state evolver and the Q-state based boundary finder
@@ -243,6 +261,8 @@ CONTAINS
 
       DEALLOCATE(xPosArray)
       DEALLOCATE(yPosArray)
+      isQmap = .TRUE.
+      needsEvolve = .TRUE.
 
     ! Generate point data, random Q-state, points arranged in a hexagonal grid
     ! for use with the Q-state evolver and the Q-state based boundary finder
@@ -362,6 +382,8 @@ CONTAINS
 
       DEALLOCATE(xPosArray)
       DEALLOCATE(yPosArray)
+      isQmap = .TRUE.
+      needsEvolve = .TRUE.
 
     ! Fail!!!
     ELSE
@@ -403,6 +425,8 @@ CONTAINS
 600 WRITE(stderr,'(A,A,A)') "ERROR: Misread temperature from file ",TRIM(filename),"."
     STOP 1
 700 WRITE(stderr,'(A,A,A)') "ERROR: Misread energy scale factor from file ",TRIM(filename),"."
+    STOP 1
+750 WRITE(stderr,'(A,A,A)') "ERROR: Misread rest lengths from file ",TRIM(filename),"."
     STOP 1
 800 WRITE(stderr,'(A,A,A)') "ERROR: Misread map type from file ",TRIM(filename),"."
     STOP 1
