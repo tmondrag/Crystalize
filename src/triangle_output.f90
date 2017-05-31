@@ -132,14 +132,14 @@ CONTAINS
     IF(num_attributes .GT. 0) THEN
       DO j=1,num_attributes
         IF (j==1) THEN
-          WRITE(outputFile%getFUnit(),'(/A,/A)') 'SCALARS Q-state double','LOOKUP_TABLE default'
+          WRITE(outputFile%getFUnit(),'(/A,/A)') 'SCALARS q_state double','LOOKUP_TABLE default'
         ELSE IF (j==2) THEN
           WRITE(outputFile%getFUnit(),'(/A,/A)') 'SCALARS grain_id double','LOOKUP_TABLE default'
         ELSE
           WRITE(outputFile%getFUnit(),'(/A,I0.2,A,/A)') 'SCALARS attribute_',j,' double','LOOKUP_TABLE default'
         END IF
         DO i=1,f_shapes%numberofpoints
-          WRITE(outputFile%getFUnit(),'(F18.12,1X)',ADVANCE="no") f_shapes%pointattributelist((i-1)+j)
+          WRITE(outputFile%getFUnit(),'(F18.12,1X)',ADVANCE="no") f_shapes%pointattributelist(num_attributes*(i-1)+j)
         END DO
         IF(f_shapes%numberofholes > 0) THEN
           ! setting the atrribute value to 0 on hole seeds may mess with some visualizations

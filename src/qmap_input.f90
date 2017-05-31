@@ -13,12 +13,14 @@ CONTAINS
   ! USAGE: latticeData = read_input_file(filename)
   FUNCTION read_input_file(filename,outfileroot) RESULT(latticeData)
     USE mFileHandling, only: FILE, stderr
-    USE basictypes, only: Lattice
+    USE basictypes, only: Lattice,LatticeEdgeSItem
     USE triangle_c_wrap, only: triangulateio,f_triangulateio,ctriangulate,copytriangles_c_to_f,init_outputs,deallocate_triangulateio
     USE triangle_c_wrap, only: C_REAL,allocate_points_ftoc,allocate_segments,allocate_holes,allocate_regions
     USE triangle_input, only: read_shapes
     USE triangle_output, only: output_triangle_to_vtk, output_triangle_to_poly
     USE trans_lattice_triangle, only: transfer_triangle_to_lattice
+    USE evolvers, only: evolve_qstates
+    Use lattice_output, only: output_lattice_to_vtk
     USE,INTRINSIC:: ISO_C_BINDING, only:C_NULL_CHAR,C_CHAR,C_INT
     IMPLICIT NONE
 
@@ -40,7 +42,8 @@ CONTAINS
     LOGICAL                                           :: isQmap, needsEvolve
 
     CHARACTER(LEN=1),PARAMETER                        :: dirSep = '/'
-    INTEGER                                           :: ls
+    INTEGER                                           :: ls,numNeighbors
+    TYPE(LatticeEdgeSItem),POINTER                    :: curr
 
     ls = INDEX(filename,dirSep,.TRUE.)
     infileroot = filename(1:ls)
@@ -407,6 +410,47 @@ CONTAINS
     CALL output_triangle_to_vtk(f_shape_out,TRIM(outfileroot)//"_000000.vtk")
     CALL output_triangle_to_poly(f_shape_out,TRIM(outfileroot)//"_000000")
     CALL transfer_triangle_to_lattice(f_shape_out,latticeData)
+    DO i = 1,latticeData%numVertices
+      curr => latticeData%edgeHash(i)%listHead%next
+      numNeighbors = 0
+      DO
+        IF (curr%isHead) EXIT
+        numNeighbors = numNeighbors + 1
+        curr => curr%next
+      END DO
+      print *, "vertex ",i," has ",numNeighbors," neighbors"
+    END DO
+    IF(needsEvolve) THEN
+      IF(isQmap) THEN
+        CALL evolve_qstates(latticeData)
+      END IF
+    END IF
+    CALL output_lattice_to_vtk(latticeData,TRIM(outfileroot)//"_000001.vtk")
+    ! IF(needsEvolve) THEN
+    !   IF(isQmap) THEN
+    !     CALL evolve_qstates(latticeData)
+    !   END IF
+    ! END IF
+    ! CALL output_lattice_to_vtk(latticeData,TRIM(outfileroot)//"_000002.vtk")
+    ! IF(needsEvolve) THEN
+    !   IF(isQmap) THEN
+    !     CALL evolve_qstates(latticeData)
+    !   END IF
+    ! END IF
+    ! CALL output_lattice_to_vtk(latticeData,TRIM(outfileroot)//"_000003.vtk")
+    ! IF(needsEvolve) THEN
+    !   IF(isQmap) THEN
+    !     CALL evolve_qstates(latticeData)
+    !   END IF
+    ! END IF
+    ! CALL output_lattice_to_vtk(latticeData,TRIM(outfileroot)//"_000004.vtk")
+    ! IF(needsEvolve) THEN
+    !   IF(isQmap) THEN
+    !     CALL evolve_qstates(latticeData)
+    !   END IF
+    ! END IF
+    ! CALL output_lattice_to_vtk(latticeData,TRIM(outfileroot)//"_000005.vtk")
+
     CALL deallocate_triangulateio(f_shape, input=.TRUE., neigh=.FALSE., voroni=.FALSE.)
     CALL deallocate_triangulateio(f_shape_out, input=.FALSE., neigh=.FALSE., voroni=.FALSE.)
     RETURN

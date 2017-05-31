@@ -58,9 +58,9 @@ CONTAINS
     USE basictypes, only: Lattice, LatticeFacetSItem
     USE triangle_c_wrap, only: f_triangulateio,allocate_points_ftoc,allocate_segments,allocate_regions,allocate_holes
     USE triangle_c_wrap, only: C_REAL
-    USE energyCalc, only: calculate_edge_energy
+    USE energyCalc, only: calculate_edge_energy_qstate
     IMPLICIT NONE
-    TYPE(lattice),INTENT(OUT)                         :: outLattice
+    TYPE(lattice),INTENT(INOUT)                       :: outLattice
     TYPE(f_triangulateio),INTENT(IN)                  :: f_shape
     INTEGER                                           :: i, err, facetIndex, num_attr
     INTEGER(C_INT)                                    :: primoVertex, secundoVertex, tertioVertex
@@ -150,6 +150,14 @@ CONTAINS
       CALL outLattice%facetReference(secundoVertex)%listHead%push(tertioVertex,i)
       CALL outLattice%facetReference(tertioVertex)%listHead%push(primoVertex,i)
 
+      ! the edges returned by Triangle are only the bounding edges. Each facet is three edges
+      CALL outLattice%edgeHash(primoVertex)%listHead%push(secundoVertex,i)
+      CALL outLattice%edgeHash(secundoVertex)%listHead%push(primoVertex,i)
+      CALL outLattice%edgeHash(secundoVertex)%listHead%push(tertioVertex,i)
+      CALL outLattice%edgeHash(tertioVertex)%listHead%push(secundoVertex,i)
+      CALL outLattice%edgeHash(tertioVertex)%listHead%push(primoVertex,i)
+      CALL outLattice%edgeHash(primoVertex)%listHead%push(tertioVertex,i)
+
     END DO
     outLattice%facets(0)%fIndex = 0
     outLattice%facets(0)%isUniverse = .TRUE.
@@ -180,7 +188,7 @@ CONTAINS
       length    = outLattice%edges(i)%length
       q1        = outLattice%vertices(primoVertex)%qState
       q2        = outLattice%vertices(secundoVertex)%qState
-      outLattice%edges(i)%enrgEdge = calculate_edge_energy(enrgScale,restBose,restFermi,q1,q2,length)
+      outLattice%edges(i)%enrgEdge = calculate_edge_energy_qstate(enrgScale,q1,q2,length)
 
       facetIndex = outLattice%facetReference(primoVertex)%listHead%search(secundoVertex)
       outLattice%edges(i)%sinesterFacet = facetIndex

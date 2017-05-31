@@ -291,7 +291,6 @@ CONTAINS
 
   ! for building the edge hash after a lattice has been built. It is far more efficient to do this while the lattice is being built
   FUNCTION build_edge_hash(inLattice) RESULT(edgeHash)
-    USE basictypes, only: Lattice
     IMPLICIT NONE
     TYPE(Lattice)                                     :: inLattice
     TYPE(LatticeEdgeSHead),DIMENSION(:),ALLOCATABLE   :: edgeHash
@@ -312,11 +311,11 @@ CONTAINS
 
   SUBROUTINE deallocate_edge_hash(edgeHash)
     IMPLICIT NONE
-    TYPE(LatticeEdgeSHead),DIMENSION(:),INTENT(INOUT) :: edgeHash
-    INTEGER                                           :: i,j
+    TYPE(LatticeEdgeSHead),DIMENSION(:),ALLOCATABLE,INTENT(INOUT) :: edgeHash
+    INTEGER                                           :: i
 
     IF (ALLOCATED(edgeHash)) THEN
-      DO i = 1, LEN(edgeHash)
+      DO i = 1, SIZE(edgeHash)
         CALL edgeHash(i)%listHead%delete()
       END DO
       DEALLOCATE(edgeHash)
@@ -324,13 +323,13 @@ CONTAINS
   END SUBROUTINE deallocate_edge_hash
 
   ! Initialize a lattice edge search sublist
-  SUBROUTINE init_lattice_edge_list(this,primoVvertexIndex)
+  SUBROUTINE init_lattice_edge_list(this,vertexIndex)
     IMPLICIT NONE
     CLASS(LatticeEdgeSItem),INTENT(INOUT),TARGET  :: this
     INTEGER(C_INT),INTENT(IN)                     :: vertexIndex
 
     this%isHead = .TRUE.
-    this%vertexIndex = primoVertexIndex
+    this%vertexIndex = vertexIndex
     this%next => this
   END SUBROUTINE init_lattice_edge_list
 
@@ -347,7 +346,7 @@ CONTAINS
     curr%edgeIndex = edgeIndex
     curr%next => this%next
     this%next => curr
-  END SUBROUTINE push_lattice_facet_list
+  END SUBROUTINE push_lattice_edge_list
 
   ! mosly useless, but here for the sake of completeness
   FUNCTION pop_lattice_edge_list(this) RESULT(edgeIndex)
@@ -383,7 +382,7 @@ CONTAINS
   ! delete and deallocate a edge list the proper way
   ! Might cause problems if this is not the list head, causing this to de deallocated
   SUBROUTINE delete_lattice_edge_list(this)
-    USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: stderr -> ERROR_UNIT
+    USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: stderr => ERROR_UNIT
     IMPLICIT NONE
     CLASS(LatticeEdgeSItem),INTENT(IN),TARGET    :: this
     TYPE(LatticeEdgeSItem),POINTER               :: prev,curr,next
