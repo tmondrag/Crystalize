@@ -125,6 +125,8 @@ MODULE basictypes
     INTEGER(C_INT)                              :: maxGrainSize     ! number of nodes inside of biggest grain
     REAL(C_REAL)                                :: avgSize          ! Average grain size, if it is useful
     INTEGER(C_INT), DIMENSION(0:7)              :: grainSizeHisto   ! Histogram of grain sizes, binned by the proportion of map coverage
+  CONTAINS
+    PROCEDURE :: does_edge_exist => does_edge_exist
   END TYPE Lattice
 
   ! Grain facet - one whole grain undivided by triangulation
@@ -379,8 +381,36 @@ CONTAINS
     END IF
   END FUNCTION pop_lattice_edge_list
 
+  FUNCTION does_edge_exist(this,primoIndex,secundoIndex) RESULT(edgeExists)
+    IMPLICIT NONE
+    CLASS(Lattice)                               :: this
+    INTEGER                                      :: primoIndex,secundoIndex
+    LOGICAL                                      :: edgeExists
+    TYPE(LatticeEdgeSItem),POINTER               :: prev,curr,next
+
+    edgeExists = .FALSE.
+    curr => this%edgeHash(primoIndex)%next
+    DO
+      IF(curr%isHead) EXIT
+      IF(curr%vertexIndex == secundoIndex) THEN
+        edgeExists = .TRUE.
+        RETURN
+      END IF
+      curr=>curr%next
+    END DO
+    curr => this%edgeHash(secundoIndex)%next
+    DO
+      IF(curr%isHead) EXIT
+      IF(curr%vertexIndex == primoIndex) THEN
+        edgeExists = .TRUE.
+        RETURN
+      END IF
+      curr=>curr%next
+    END DO
+  END FUNCTION does_edge_exist
+
   ! delete and deallocate a edge list the proper way
-  ! Might cause problems if this is not the list head, causing this to de deallocated
+  ! Might cause problems if this is not the list head, causing this to be deallocated
   SUBROUTINE delete_lattice_edge_list(this)
     USE, INTRINSIC :: ISO_FORTRAN_ENV, ONLY: stderr => ERROR_UNIT
     IMPLICIT NONE
